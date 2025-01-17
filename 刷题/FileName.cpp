@@ -1,51 +1,30 @@
 #include <iostream>
-#include <vector>
+#include <string>
+#include <cstring>
 
+using namespace std;
 
-void Recerseave(std::vector<std::vector<int>>& nums)
-{
-    int n = nums.size();
-    for (int i = 0; i < n; i++)
-    {
-        for (int j = 0; j < n; j++)
+bool solve(string A, string B) {
+    // write code here
+    if (A == B) return true;
+    int n = A.size();
+    int m = B.size();
+    int pos = A.find(B[0]);
+    while (pos != string::npos)
+    { 
+
+        if ((strncmp(A.c_str() + pos, B.c_str(), n-pos) == 0) && (strncmp(A.c_str(), B.c_str() + n-pos, pos)==0))
         {
-            std::cout << nums[abs(n - i - 1)][abs(n - j - 1)]<<" ";
+           
+            return true;
         }
-        std::cout << std::endl;
+        pos = A.find( B[0],pos+1);
     }
-
+    return false;
 }
-void Mirror(std::vector<std::vector<int>>& nums)
-{
-    int n = nums.size();
-    for (int i = n-1; i >=0; i--)
-    {
-        for (int j = 0; j < n; j++)
-        {
-            std::cout << nums[i][j] << " ";
-        }
-        std::cout << std::endl;
-    }
-}
-
 int main()
 {
-    int n;
-    std::cin >> n;
-    std::vector<std::vector<int>> nums(n, std::vector<int>(n));
-    for (int i = 0; i < n; i++)
-    {
-        for (int j = 0; j < n; j++)
-        {
-            std::cin >> nums[i][j];
-        }
-    }
-    int m, num;
-    std::cin >> m;
-    while (m--)
-    {
-        std::cin >> num;
-        if (num == 1)  Recerseave(nums);
-        else Mirror(nums);
-    }
+     string A = "nowncoder";
+    string B = "ncodernow";
+    solve(A, B);
 }
