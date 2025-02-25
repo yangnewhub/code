@@ -14,6 +14,11 @@
 #include <functional>
 #include <sys/epoll.h>
 #include <unordered_map>
+#include <thread>
+#include <sys/eventfd.h>
+#include <mutex>
+#include <unordered_map>
+#include <sys/timerfd.h>
 
 #define INF 0
 #define DBG 1
@@ -184,7 +189,7 @@ public:
     //监听
     void Listen()
     {
-        int n =listen(_sockfd,0);
+        int n =listen(_sockfd,1024);
         if(n<0)
         {
             ERR_LOG("listen fail");
@@ -216,6 +221,7 @@ public:
             ERR_LOG("accept fail");
             abort();
         }
+        return newfd;
     }
     //发送信息
     ssize_t Send(void * buffer,int len,int flag=0)
@@ -289,13 +295,14 @@ private:
 };
 
 class Poller;
+class EventLoop;
 //处理单个连接
 class Channel
 {
     using CallBack = std::function<void()>;
 public:
-    Channel(Poller* poller,int fd)
-        :_poller(poller),_fd(fd),_events(0),_revents(0)
+    Channel(EventLoop* eventloop,int fd)
+        :_eventloop(eventloop),_fd(fd),_events(0),_revents(0)
     {}
     //获取描述符
     int Fd(){return _fd;}
@@ -363,7 +370,7 @@ private:
     int _fd;               //连接的描述符
     uint32_t _events;      //连接监控的事件
     uint32_t _revents;     //当前连接触发的事件
-    Poller* _poller;
+    EventLoop* _eventloop;
 
     CallBack _read_callback;   //可读事件的回调
     CallBack _write_callback;  //可写事件的回调
@@ -391,6 +398,11 @@ private:
             abort();
         }
     }
+    bool HasEvents(Channel* channel)
+    {
+        auto it=_channels.find(channel->Fd());
+        return it==_channels.end();
+    }
 public:
     Poller()
     {
@@ -411,6 +423,10 @@ public:
     //修改
     void Update(Channel* channel)
     {
+        if(HasEvents(channel)) 
+        {
+            Add(channel);
+        }
         EpollCtl(channel,EPOLL_CTL_MOD);
     }
     //移除
@@ -430,8 +446,9 @@ public:
     }
     //将就绪是将放到活跃队列里
     void Poll(std::vector<Channel*>* active) 
-    {
+    {      
         int n=epoll_wait(_epollfd,_events,MAXEVENTSIZE,-1);
+
         if(n<0)
         {
             ERR_LOG("epollfd wait fail");
@@ -445,10 +462,254 @@ public:
         }
     }
 private:
-    int _epollfd;                                 //epoll的描述符
+    int _epollfd;                                  //epoll的描述符
     std::unordered_map<int,Channel*> _channels;   //fd到Channel的映射
     struct epoll_event _events[MAXEVENTSIZE];
 };
 
-void Channel::Remove(){ _poller->Erase(this);}
-void Channel::Update(){_poller->Update(this);}
+ 
+class TimerTask
+{
+    using Factor = std::function<void()>;
+public:
+    TimerTask(int id,const Factor& task,int timeout)
+        :_id(id),_task(task),_timeout(timeout),_start(true)
+    {}
+    ~TimerTask()
+    {
+        //如果时间到了，就执行定时任务
+        if(_start) _task;
+    }
+    void Cacnl(){_start=false;}
+    //返回超时时间
+    int TimeOut(){return _timeout;}
+private:
+    int _id;        //id
+    Factor _task;   //定时的任务
+    bool _start;    //是否运行
+    int _timeout;   //超时时间
+};
+//利用智能指针，
+class TimerWheel
+{
+    using Factor = std::function<void()>;
+    using Pk=std::shared_ptr<TimerTask>;
+    using WeakPT=std::weak_ptr<TimerTask>;
+private:
+    int CreateTimerFd()
+    {
+        int fd=timerfd_create(CLOCK_MONOTONIC,0);
+        if(fd<0)
+        {
+            ERR_LOG("create timerfd fail");
+            abort();
+        }
+
+        struct itimerspec newtime,oldtime;
+        newtime.it_value.tv_nsec=1;   //第一次超时的秒 
+        newtime.it_value.tv_sec=0;    //第一次超时的毫秒
+        newtime.it_interval.tv_nsec=1;//第二次
+        newtime.it_interval.tv_sec=0;
+        int n = timerfd_settime(fd,0,&newtime,&oldtime);
+        return fd;
+        
+    }
+    uint64_t ReadTimerFd()
+    {
+        uint64_t times;
+        int n=read(_timerfd,&times,8);
+        if(n<0)
+        {
+            ERR_LOG("read fail");
+            abort();
+        }
+        return times;
+    }
+    void OnTime()
+    {
+        uint64_t times=ReadTimerFd();
+        for(int i=0;i<times;i++)
+        {
+            Move();
+        }
+    }
+public:
+    TimerWheel(EventLoop* loop)
+        :_pos(0),_capcaity(60),_timewheel(60),_loop(loop)
+    {
+        _timerfd=CreateTimerFd();
+        _timerfd_channel->SetReadCallBack(std::bind(&TimerWheel::OnTime,this));
+        _timerfd_channel->EnableRead();
+    }
+    //刻度移动
+    void Move()
+    {
+        _pos=(_pos+1)%_capcaity;
+        _timewheel[_pos].clear();
+        
+    }
+    //增加
+    void TimerAdd(int id, const Factor& task,int timeout)
+    {
+        //创建一个任务对象
+        Pk pk=std::make_shared<TimerTask>(id,task,timeout);
+        //超时位置
+        int pos=(_pos+timeout)%_capcaity;
+        _wheel[id]=WeakPT(pk);
+        _timewheel[pos].push_back(pk);
+    }
+    //刷新
+    void TimerReferesh(int id)
+    {
+        auto it = _wheel.find(id);
+        if(it==_wheel.end()) return ;  //没找到，说明没这个任务，不需要刷新
+
+        //刷新
+        int timeout = (it->second.lock())->TimeOut();
+        int pos=(_pos+timeout)%_capcaity;
+        _timewheel[pos].push_back(it->second.lock());
+    }
+    //删除
+    void TimerCacnl(int id)
+    {
+        auto it = _wheel.find(id);
+        if(it==_wheel.end()) return ;  //没找到，说明没这个任务，不需要取消
+        it->second.lock()->Cacnl();
+    }
+private:
+    int _pos;                                   //当前的时间可读
+    int _capcaity;                              //最大的时间刻度
+    std::vector<std::vector<Pk>> _timewheel;    //时间轮
+    std::unordered_map<int,WeakPT> _wheel;      //id和weakptr对应
+    EventLoop* _loop;
+
+    int _timerfd;           //通过这个实现刻度移动，触发一次移动一次
+    std::shared_ptr<Channel> _timerfd_channel;
+};
+
+//现在可以有一个任务队列
+//Eventloop就是管理线程的模块，一个连接在多个线程中处理就会出现问题，加锁？特别浪费
+//一个连接就有一个线程
+class EventLoop
+{
+    using Factor=std::function<void()>;
+private:
+    static int CreateEventFd()
+    {
+        int fd= eventfd(0,EFD_CLOEXEC|EFD_NONBLOCK);
+        if(fd<0)
+        {
+            ERR_LOG("eventfd create fail");
+            abort();
+        }
+        return fd;
+    }
+    void ReadEventFd()
+    {
+        char buffer[1024]={0};
+        int n=read(_eventfd,buffer,1023);
+        if(n<0)
+        {
+            if(errno==EINTR||errno==EAGAIN)
+            {
+                return;
+            }
+            ERR_LOG("read fail");
+            abort();
+        }
+    }
+    void WriteEventFd()
+    {
+        int64_t val=1;
+        int n=write(_eventfd,&val,8);
+        if(n<0)
+        {
+            if(errno==EINTR||errno==EAGAIN)
+            {
+                return;
+            }
+            ERR_LOG("read fail");
+            abort();
+        }
+    }
+    //运行任务池中所有的任务
+    void RunAllTask()
+    {
+        std::vector<Factor> task;
+        {
+            std::unique_lock<std::mutex> _lock(_mutex);
+            swap(task,_task);
+        }
+        for(auto f:task)
+        {
+            f();
+        }
+    }
+public:
+    EventLoop()
+        :_thread_id(std::this_thread::get_id()),
+        _eventfd(CreateEventFd()),
+        _eventfd_channel(std::make_shared<Channel>(this,_eventfd)),
+        _timewheel(this)
+    {
+        _eventfd_channel->SetReadCallBack(std::bind(&EventLoop::ReadEventFd,this));
+        //启动可读事件 
+        _eventfd_channel->EnableRead();
+    }
+    //启动监控  执行就绪事件  执行任务池
+    void Start()
+    {
+        while(1)
+        {
+            //启动监控
+            std::vector<Channel*> active;
+            _poller.Poll(&active);
+            //执行就绪事件
+            for(auto channel:active)
+            {
+                channel->HandleEvents();
+            }
+            //任务池
+            RunAllTask();
+        }
+    }   
+    //是否在当前线程
+    bool InThisThread()
+    {
+        return std::this_thread::get_id()==_thread_id;
+    }
+    //判断将要执行的任务是否处于当前线程中，如果是则执行，不是则压入队列。
+    void RunInLoop(const Factor &cb) {
+        if (InThisThread()) {
+            return cb();
+        }
+        return PushTask(cb);
+    }
+    //将任务压入任务池
+    void PushTask(const Factor& f)
+    { 
+        {
+            std::unique_lock<std::mutex> _lock(_mutex);
+            _task.push_back(f);
+        }
+        //由于可能epoll在等待不能就绪，所以需要唤醒
+        WriteEventFd(); 
+    }
+    void Erase(Channel* channel){ _poller.Erase(channel);}
+    void Update(Channel*channel){_poller.Update(channel);}
+    void TimerAdd(int id, const Factor& task,int timeout){return _timewheel.TimerAdd(id,task,timeout);}
+    void TimerReferesh(int id){return _timewheel.TimerReferesh(id);}
+    void TimerCacnl(int id){return _timewheel.TimerCacnl(id);}
+private:
+    std::thread::id _thread_id;                 //线程的id
+    Poller _poller;                             //Poller
+    int _eventfd;                               //eventfd
+    std::shared_ptr<Channel> _eventfd_channel;
+    std::vector<Factor> _task;                  //任务池
+    std::mutex _mutex;                          //任务池加锁
+    TimerWheel _timewheel;
+};
+
+
+void Channel::Remove(){ _eventloop->Erase(this);}
+void Channel::Update(){ _eventloop->Update(this);}
