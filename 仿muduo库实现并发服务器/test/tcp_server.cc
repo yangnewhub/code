@@ -1,7 +1,9 @@
 #include "../source/server.hpp"
+#include <time.h>
+
 void HandleClose(Channel* channel)
 {
-    std::cout<<"close fd:"<<channel->Fd()<<std::endl;
+    DBG_LOG("close fd: %d",channel->Fd());
     channel->Remove();
     delete channel;
 }
@@ -19,7 +21,7 @@ void HandleRead(Channel* channel)
         HandleClose(channel);
     } 
     channel->EnableWrite();
-    std::cout<<date<<std::endl;
+    DBG_LOG("recv success date:%s",date);
 }
 void HandleWrite(Channel* channel)
 {
@@ -34,37 +36,36 @@ void HandleWrite(Channel* channel)
 } 
 
 
-void HandleEvent(Channel* channel)
+void HandleEvent(Channel* channel,EventLoop* loop,int id)
 {
-    
+    loop->TimerReferesh(id);
 }
-void Accept( Poller* poller,Channel* channel)
+void Accept( EventLoop* loop,Channel* channel)
 {
     int newfd=accept(channel->Fd(),nullptr,nullptr);
     if(newfd < 0) {return ;}
-    Channel *nchannel = new Channel(poller,newfd);
+    int times = rand()%10000;
+
+    Channel *nchannel = new Channel(loop,newfd);
     nchannel->SetReadCallBack(std::bind(HandleRead,nchannel));
     nchannel->SetWriteCallBack(std::bind(HandleWrite,nchannel));
     nchannel->SetErrCallBack(std::bind(HandleErr,nchannel));
+    nchannel->SetEventsCallBack(std::bind(HandleEvent,nchannel,loop,times));
+    //定时任务，10秒后没有没有反应就关闭
+    loop->TimerAdd(times,std::bind(&HandleClose,nchannel),10);
     nchannel->EnableRead();
 
 }
 int main()
 {
-    Poller poller;
-    Socket listen_socfd;
-    listen_socfd.CreateServerConnect(8080);
-    Channel channel(&poller,listen_socfd.Sockfd());
-    channel.SetReadCallBack(std::bind(Accept,&poller,&channel));
-    channel.EnableRead();
+    srand(time(NULL));
 
-    while(1)
-    {
-        std::vector<Channel*> active;
-        poller.Poll(&active);
-        for(auto ch:active)
-        {
-            ch->HandleEvents();
-        }
-    }
+    EventLoop loop;
+    Socket listen_socfd;
+    listen_socfd.CreateServerConnect(8081);
+    Channel channel(&loop,listen_socfd.Sockfd());
+    channel.SetReadCallBack(std::bind(&Accept,&loop,&channel));
+    channel.EnableRead();   
+  
+    loop.Start();
 }

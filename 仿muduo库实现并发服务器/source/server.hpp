@@ -426,8 +426,13 @@ public:
         if(HasEvents(channel)) 
         {
             Add(channel);
+            //DBG_LOG("epoll add event success");
         }
-        EpollCtl(channel,EPOLL_CTL_MOD);
+        else
+        {
+            EpollCtl(channel,EPOLL_CTL_MOD);
+            //DBG_LOG("epoll update event success");
+        }
     }
     //移除
     void Erase(Channel* channel)
@@ -443,11 +448,13 @@ public:
             }
         }
         EpollCtl(channel,EPOLL_CTL_DEL);
+        //DBG_LOG("epoll remove event success");
     }
     //将就绪是将放到活跃队列里
     void Poll(std::vector<Channel*>* active) 
     {      
         int n=epoll_wait(_epollfd,_events,MAXEVENTSIZE,-1);
+        //DBG_LOG("epoll_wait success, n: %d",n);
 
         if(n<0)
         {
@@ -456,8 +463,8 @@ public:
         }
         for(int i=0;i<n;i++)
         {
-            int fd=_events->data.fd;
-            _channels[fd]->SetREvent(_events->events);
+            int fd=_events[i].data.fd;
+            _channels[fd]->SetREvent(_events[i].events);
             active->push_back(_channels[fd]);
         }
     }
@@ -478,16 +485,19 @@ public:
     ~TimerTask()
     {
         //如果时间到了，就执行定时任务
-        if(_start) _task;
+        if(_start) _task();
+        _relase();
     }
     void Cacnl(){_start=false;}
     //返回超时时间
     int TimeOut(){return _timeout;}
+    void SetRelase(const Factor& relase){_relase=relase;}
 private:
     int _id;        //id
     Factor _task;   //定时的任务
     bool _start;    //是否运行
     int _timeout;   //超时时间
+    Factor _relase;
 };
 //利用智能指针，
 class TimerWheel
@@ -496,7 +506,7 @@ class TimerWheel
     using Pk=std::shared_ptr<TimerTask>;
     using WeakPT=std::weak_ptr<TimerTask>;
 private:
-    int CreateTimerFd()
+    static int CreateTimerFd()
     {
         int fd=timerfd_create(CLOCK_MONOTONIC,0);
         if(fd<0)
@@ -504,15 +514,20 @@ private:
             ERR_LOG("create timerfd fail");
             abort();
         }
-
         struct itimerspec newtime,oldtime;
-        newtime.it_value.tv_nsec=1;   //第一次超时的秒 
-        newtime.it_value.tv_sec=0;    //第一次超时的毫秒
-        newtime.it_interval.tv_nsec=1;//第二次
-        newtime.it_interval.tv_sec=0;
+        newtime.it_value.tv_nsec=0;   //第一次超时的毫秒 
+        newtime.it_value.tv_sec=1;    //第一次超时的秒
+        newtime.it_interval.tv_nsec=0;//第二次
+        newtime.it_interval.tv_sec=1;
         int n = timerfd_settime(fd,0,&newtime,&oldtime);
         return fd;
         
+    }
+    void EraseInWheel(int id)
+    {
+        auto it=_wheel.find(id);
+        if(it==_wheel.end()) return;
+        _wheel.erase(it);
     }
     uint64_t ReadTimerFd()
     {
@@ -533,11 +548,37 @@ private:
             Move();
         }
     }
+    void TimerAddInLoop(int id, const Factor& task,int timeout)
+    {
+        //创建一个任务对象
+        Pk pk=std::make_shared<TimerTask>(id,task,timeout);
+        pk->SetRelase(std::bind(&TimerWheel::EraseInWheel,this,id));
+        //超时位置
+        int pos=(_pos+timeout)%_capcaity;
+        _wheel[id]=WeakPT(pk);
+        _timewheel[pos].push_back(pk);
+    }
+    void TimerRefereshInLoop(int id)
+    {
+        auto it = _wheel.find(id);
+        if(it==_wheel.end()) return ;  //没找到，说明没这个任务，不需要刷新
+
+        //刷新
+        int timeout = (it->second.lock())->TimeOut();
+        int pos=(_pos+timeout)%_capcaity;
+        _timewheel[pos].push_back(it->second.lock());
+    }
+    void TimerCacnlInLoop(int id)
+    {
+        auto it = _wheel.find(id);
+        if(it==_wheel.end()) return ;  //没找到，说明没这个任务，不需要取消
+        it->second.lock()->Cacnl();
+    }
 public:
     TimerWheel(EventLoop* loop)
         :_pos(0),_capcaity(60),_timewheel(60),_loop(loop)
+        ,_timerfd(CreateTimerFd()),_timerfd_channel(std::make_shared<Channel>(loop,_timerfd))
     {
-        _timerfd=CreateTimerFd();
         _timerfd_channel->SetReadCallBack(std::bind(&TimerWheel::OnTime,this));
         _timerfd_channel->EnableRead();
     }
@@ -548,35 +589,18 @@ public:
         _timewheel[_pos].clear();
         
     }
+    bool HasTimer(int id)
+    {
+        auto it=_wheel.find(id);
+        return it!=_wheel.end();
+    }
     //增加
-    void TimerAdd(int id, const Factor& task,int timeout)
-    {
-        //创建一个任务对象
-        Pk pk=std::make_shared<TimerTask>(id,task,timeout);
-        //超时位置
-        int pos=(_pos+timeout)%_capcaity;
-        _wheel[id]=WeakPT(pk);
-        _timewheel[pos].push_back(pk);
-    }
+    void TimerAdd(int id, const Factor& task,int timeout);
     //刷新
-    void TimerReferesh(int id)
-    {
-        auto it = _wheel.find(id);
-        if(it==_wheel.end()) return ;  //没找到，说明没这个任务，不需要刷新
-
-        //刷新
-        int timeout = (it->second.lock())->TimeOut();
-        int pos=(_pos+timeout)%_capcaity;
-        _timewheel[pos].push_back(it->second.lock());
-    }
+    void TimerReferesh(int id);
+   
     //删除
-    void TimerCacnl(int id)
-    {
-        auto it = _wheel.find(id);
-        if(it==_wheel.end()) return ;  //没找到，说明没这个任务，不需要取消
-        it->second.lock()->Cacnl();
-    }
-private:
+    void TimerCacnl(int id);
     int _pos;                                   //当前的时间可读
     int _capcaity;                              //最大的时间刻度
     std::vector<std::vector<Pk>> _timewheel;    //时间轮
@@ -669,7 +693,7 @@ public:
             {
                 channel->HandleEvents();
             }
-            //任务池
+            //任务池x
             RunAllTask();
         }
     }   
@@ -700,6 +724,7 @@ public:
     void TimerAdd(int id, const Factor& task,int timeout){return _timewheel.TimerAdd(id,task,timeout);}
     void TimerReferesh(int id){return _timewheel.TimerReferesh(id);}
     void TimerCacnl(int id){return _timewheel.TimerCacnl(id);}
+    bool HasTimer(int id){return _timewheel.HasTimer(id);}
 private:
     std::thread::id _thread_id;                 //线程的id
     Poller _poller;                             //Poller
@@ -707,9 +732,27 @@ private:
     std::shared_ptr<Channel> _eventfd_channel;
     std::vector<Factor> _task;                  //任务池
     std::mutex _mutex;                          //任务池加锁
-    TimerWheel _timewheel;
+    TimerWheel _timewheel;                      //时间轮
 };
 
 
 void Channel::Remove(){ _eventloop->Erase(this);}
 void Channel::Update(){ _eventloop->Update(this);}
+
+
+ //增加
+ void TimerWheel::TimerAdd(int id, const Factor& task,int timeout)
+ {
+    _loop->RunInLoop(std::bind(&TimerWheel::TimerAddInLoop,this,id,task,timeout));
+ }
+ //刷新
+ void TimerWheel::TimerReferesh(int id)
+ {
+     _loop->RunInLoop(std::bind(&TimerWheel::TimerRefereshInLoop,this,id));
+ }
+
+ //删除
+ void TimerWheel::TimerCacnl(int id)
+ {
+     _loop->RunInLoop(std::bind(&TimerWheel::TimerCacnlInLoop,this,id));
+ }
