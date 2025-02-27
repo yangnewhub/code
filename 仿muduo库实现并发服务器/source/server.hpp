@@ -19,6 +19,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <sys/timerfd.h>
+#include <assert.h>
 
 #define INF 0
 #define DBG 1
@@ -81,6 +82,14 @@ public:
             _buffer.resize(capacity);
         }
     }
+    void ReadMove(int len)
+    {
+        _read_pos+=len;
+    }
+    void WriteMove(int len)
+    {
+        _write_pos+=len;
+    }
     //写入数据
     void Write(const void* date,int len)
     {
@@ -109,7 +118,7 @@ public:
     {
         Write(date.ReadAddress(),date.EnableReadSize());
     }
-    void WriteStringAndPush(Buffer& date)
+    void WriteBufferAndPush(Buffer& date)
     {
         WriteAndPush(date.ReadAddress(),date.EnableReadSize());
     }
@@ -162,17 +171,18 @@ public:
     Socket(int socket=-1):_sockfd(socket)
     {}
     //创建套接字
-    void Create()
+    bool Create()
     {
         _sockfd=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
         if(_sockfd<0)
         {
             ERR_LOG("create socket fail");
-            abort();
+            return false;
         }
+        return true;
     }
     //绑定
-    void Bind(const std::string &ip ,uint16_t port)
+    bool Bind(const std::string &ip ,uint16_t port)
     {
         struct sockaddr_in client;
         memset((void*)&client,0,sizeof(client));
@@ -183,21 +193,23 @@ public:
         if(n<0)
         {
             ERR_LOG("bind fail");
-            abort();
+            return false;
         }
+        return true;
     }
     //监听
-    void Listen()
+    bool Listen()
     {
         int n =listen(_sockfd,1024);
         if(n<0)
         {
             ERR_LOG("listen fail");
-            abort();
+            return false;
         }
+        return true;
     }
     //连接服务器
-    void Connect(const std::string &ip ,uint16_t port)
+    bool Connect(const std::string &ip ,uint16_t port)
     {
         struct sockaddr_in server;
         memset((void*)&server,0,sizeof(server));
@@ -208,8 +220,9 @@ public:
         if(n<0)
         {
             ERR_LOG("connect fail");
-            abort();
+            return false;
         }
+        return true;
 
     }
     //接受连接
@@ -219,7 +232,7 @@ public:
         if(newfd<0)
         {
             ERR_LOG("accept fail");
-            abort();
+            return -1;
         }
         return newfd;
     }
@@ -238,6 +251,10 @@ public:
         }
         return n;
     }
+    ssize_t NoBlackSend(void * buffer,int len)
+    {
+        return Send(buffer,len,MSG_DONTWAIT);
+    }
     //接受信息
     ssize_t Recv(void * buffer,int len,int flag=0)
     {
@@ -253,6 +270,10 @@ public:
         }
         return n;
     }
+    ssize_t NoBlackRecv(void * buffer,int len)
+    {
+        return Recv(buffer,len,MSG_DONTWAIT);
+    }
     //关闭套接字
     void Close()
     {
@@ -263,6 +284,7 @@ public:
         }
 
     }
+
     //设置套接字为非阻塞
     void SetNoBlock()
     {
@@ -270,20 +292,22 @@ public:
         fcntl(_sockfd,flag|O_NONBLOCK);
     }
     //创建客户端连接
-    void CreateClientConnect(const std::string& ip,uint32_t port)
+    bool CreateClientConnect(const std::string& ip,uint32_t port)
     {
-        Create();
-        Connect(ip,port);
+        if(Create()==false) return false;
+        if(Connect(ip,port)==false) return false;
         INF_LOG("create client connect success,sockfd: %d",_sockfd);
+        return true;
     }
     //创建服务端连接
-    void CreateServerConnect(uint32_t port,const std::string& ip="0.0.0.0")
+    bool CreateServerConnect(uint32_t port,const std::string& ip="0.0.0.0")
     {
-        Create();
+        if(Create()==false) return false ;
         SetNoBlock();
-        Bind(ip,port);
-        Listen();     
+        if(Bind(ip,port)==false) return false;
+        if(Listen()==false) return false;     
         INF_LOG("create server connect success,sockfd: %d",_sockfd);
+        return true;
     }
     //获取描述符
     int Sockfd()
@@ -438,15 +462,12 @@ public:
     void Erase(Channel* channel)
     {
         //先在hash中移除
-        auto it=_channels.begin();
-        while(it!=_channels.end())
+        auto it=_channels.find(channel->Fd());
+        if(it!=_channels.end())
         {
-            if(it->first==channel->Fd())
-            {
-                _channels.erase(it);
-                break;
-            }
+            _channels.erase(it);
         }
+        
         EpollCtl(channel,EPOLL_CTL_DEL);
         //DBG_LOG("epoll remove event success");
     }
@@ -572,7 +593,10 @@ private:
     {
         auto it = _wheel.find(id);
         if(it==_wheel.end()) return ;  //没找到，说明没这个任务，不需要取消
-        it->second.lock()->Cacnl();
+        Pk p=it->second.lock();
+
+        if(p)p->Cacnl();
+
     }
 public:
     TimerWheel(EventLoop* loop)
@@ -719,11 +743,17 @@ public:
         //由于可能epoll在等待不能就绪，所以需要唤醒
         WriteEventFd(); 
     }
+    //移除
     void Erase(Channel* channel){ _poller.Erase(channel);}
+    //修改
     void Update(Channel*channel){_poller.Update(channel);}
+    //增加
     void TimerAdd(int id, const Factor& task,int timeout){return _timewheel.TimerAdd(id,task,timeout);}
+    //刷新
     void TimerReferesh(int id){return _timewheel.TimerReferesh(id);}
+    //取消
     void TimerCacnl(int id){return _timewheel.TimerCacnl(id);}
+    //判断是否在
     bool HasTimer(int id){return _timewheel.HasTimer(id);}
 private:
     std::thread::id _thread_id;                 //线程的id
@@ -756,3 +786,340 @@ void Channel::Update(){ _eventloop->Update(this);}
  {
      _loop->RunInLoop(std::bind(&TimerWheel::TimerCacnlInLoop,this,id));
  }
+ 
+class Any
+{
+private:
+    class holder
+    {
+    public:
+        virtual ~holder(){}
+        virtual const std::type_info& type()=0;
+        virtual holder* clone()=0;
+    };
+    template <class T>
+    class placeholder:public holder
+    {
+    public:
+        placeholder(const T& val){_val=val;}
+        virtual const std::type_info& type(){return typeid(T);}
+        virtual holder* clone(){return new placeholder(_val);}
+    public:
+        T _val;
+    };
+    holder * _val;
+public:
+    Any():_val(nullptr){}
+    ~Any(){if(_val) delete _val;}
+    template<class T>
+    Any(const T& val){_val=new placeholder<T>(val);}
+    Any(const Any& val){_val=(val._val?val._val->clone():nullptr);}
+
+    Any& swap(Any other)
+    {
+        std::swap(_val,other._val);
+        return *this;
+    }
+    template<class T>
+    Any& operator=(const T& val)
+    {
+        swap(Any(val));
+        return *this;
+    }
+    Any& operator=(const Any val)
+    {
+        swap(Any(val));
+        return *this;
+    }
+    template <class T>
+    T* get()
+    {
+        assert(typeid(T) == _val->type());
+        return &((placeholder<T>*)_val)->_val;
+    }
+};
+enum ConnectStatu
+{
+    DISCONNECTED, //关闭
+    CONNECTING,   //半连接--刚连接上
+    CONNECTED,    //连接
+    DISCONNECTING //半关闭--准备关闭
+};
+class Connection: public std::enable_shared_from_this<Connection>
+{ 
+    using PtrConnection=std::shared_ptr<Connection>;
+    using ConnectCallBack=std::function<void(const PtrConnection&)>;
+    using MessagCallBack=std::function<void(const PtrConnection&,Buffer*)>;
+    using CloseCallBack=std::function<void(const PtrConnection&)>;
+    using EventCallBack=std::function<void(const PtrConnection&)>;
+private:
+    //Channel的五个回调
+    //读
+    void HandlerRead()
+    {
+        //采用非阻塞读
+        char buffer[65536]={0};
+        int ret = _socket.NoBlackRecv(buffer,65535);
+        //当ret<0时就是出错了，需要关闭连接
+        if(ret<0)
+        {
+            
+            //这个不是真正的关闭连接
+            //需要将输入输出缓冲区中的内容处理掉然后关闭
+            return ShutDownInLoop();
+        }
+        //将读到的数据写入读取缓冲区
+        _in_buffer.WriteAndPush(buffer,ret);
+        //处理用户的message回调
+        if(_in_buffer.EnableReadSize()>0)
+        {
+            if (_message_callback)_message_callback(shared_from_this(),&_in_buffer);
+        }
+    }
+    //写
+    void HandlerWrite()
+    {
+        //非阻塞发送
+        int ret=_socket.NoBlackSend(_out_buffer.ReadAddress(),_out_buffer.EnableReadSize());
+        if(ret<0)
+        {
+            //发送错误，在这里就需要真正的关闭连接了
+            //先处理掉发送缓冲区中的数据然后关闭
+            if(_out_buffer.EnableReadSize()>0)
+            {
+                if (_message_callback)_message_callback(shared_from_this(),&_out_buffer);
+            }
+            return Release();
+        }
+        //发送完成，需要移动指针
+        _out_buffer.ReadMove(ret);
+        //当读完后需要将可读关闭，如果还处于半关闭状态，关闭
+        if(_out_buffer.EnableReadSize()==0)
+        {
+            _channel.DisableWrite();
+            if(_statu==DISCONNECTING)
+            {
+                return Release();
+            }
+        }
+    }
+    //关闭
+    void HandlerClose()
+    {
+        //一旦出现问题，这个什么也不能干，处理下读到的数据，然后关闭
+        if(_in_buffer.EnableReadSize()>0)
+        {
+            if (_message_callback)_message_callback(shared_from_this(),&_in_buffer);
+        }
+        return Release();
+    }
+    //错误
+    void HandlerErr()
+    {
+        return HandlerClose();
+    }
+    //任意事件
+    void HandlerEvent()
+    {
+        //有定时任务，就去刷新一下
+        if(_istrue_timer) _loop->TimerReferesh(_conn_id);
+        //有用户提供的就去执行一下
+        if(_event_callback) _event_callback(shared_from_this());
+    }
+    //将数据从接收缓冲区移动到发送缓冲区
+    void SendInLoop(Buffer & buff)
+    {
+        if(_statu==DISCONNECTED) return;
+        //将内容写入发送缓冲区
+        _out_buffer.WriteBufferAndPush(buff);
+        //没有开启可写就开启
+        if(_channel.WriteAble()==false) _channel.EnableWrite();
+    }
+    //开启定时任务
+    void StartTimerTaskInLoop(int sec)
+    {
+        //状态开启
+        _istrue_timer=true;
+        //如果已经存在了，就刷新一下
+        if(_loop->HasTimer(_conn_id)) _loop->TimerReferesh(_conn_id);
+        //将任务加入到定时器中
+        _loop->TimerAdd(_conn_id,std::bind(&Connection::Release,this),sec);
+    }
+    //取消定时任务
+    void CancleTimerTaskInLoop()
+    {
+        //状态关闭
+        _istrue_timer=false;
+        //存在就取消
+        if(_loop->HasTimer(_conn_id)) _loop->TimerCacnl(_conn_id);
+    }
+    //真正的关闭
+    void ReleaseInLoop()
+    {
+        //DBG_LOG("开始关闭");
+        //修改连接状态
+        _statu=DISCONNECTED;
+        //解除监控
+        _loop->Erase(&_channel);
+        //关闭文件描述符
+        _socket.Close();
+        //DBG_LOG("文件描述符关闭");
+        
+        //取消定时任务
+        if(_istrue_timer) _loop->TimerCacnl(_conn_id);
+       
+        //执行用户给的回调
+        if(_close_callback) _close_callback(shared_from_this());
+        //DBG_LOG("close回调执行完毕");
+        //执行组件内的回调
+        if(_server_close_callback) _server_close_callback(shared_from_this());
+        //DBG_LOG("回调执行完毕");
+
+
+    }
+    //没有直接关闭连接，需要将两个缓冲区中的内容处理
+    void ShutDownInLoop()
+    {  
+        //设置为半连接
+        _statu=DISCONNECTING;
+        //读缓冲区
+        if(_in_buffer.EnableReadSize()>0)
+        {
+            if (_message_callback) 
+            {
+                _message_callback(shared_from_this(),&_in_buffer);
+            }
+        }
+
+        //写缓冲区
+        if(_out_buffer.EnableReadSize()>0)
+        {
+            if (_channel.WriteAble() == false)
+            {
+                _channel.EnableWrite();
+            }
+        }
+
+        if(_out_buffer.EnableReadSize()==0)
+        {   
+            return Release();
+        }
+
+    }
+   
+    void ConnectInLoop()
+    {
+        assert(_statu==CONNECTING);
+        //修改连接状态
+        _statu=CONNECTED;
+        //启动可读
+        _channel.EnableRead();
+        //执行用户的连接回调
+        if(_connect_callback) _connect_callback(shared_from_this());
+    }
+    //修改协议
+    void UpGardInLoop(const Any& context,
+        const ConnectCallBack& connect_callback,
+        const MessagCallBack& message_callback,
+        const CloseCallBack& close_callback,
+        const EventCallBack& event_callback
+    )
+    {
+        _context=context;
+        _connect_callback=connect_callback;
+        _message_callback=message_callback;
+        _close_callback=close_callback;
+        _event_callback=event_callback;
+    }
+public:
+    Connection(EventLoop* loop,int id,int sockfd)
+        :_loop(loop),_conn_id(id),_sockfd(sockfd),_socket(sockfd),
+        _channel(loop,sockfd),_istrue_timer(false),_statu(CONNECTING)
+    {
+        _channel.SetReadCallBack(std::bind(&Connection::HandlerRead,this));
+        _channel.SetWriteCallBack(std::bind(&Connection::HandlerWrite,this));
+        _channel.SetErrCallBack(std::bind(&Connection::HandlerErr,this));
+        _channel.SetCloseCallBack(std::bind(&Connection::HandlerClose,this));
+        _channel.SetEventsCallBack(std::bind(&Connection::HandlerEvent,this));
+
+    }
+    int Id(){return _conn_id;}
+    int Fd(){return _sockfd;}
+    bool IsConnect(){return _statu==CONNECTED;}
+    void SetConText(const Any& context){_context=context;}
+    Any* GetConText(){return &_context;}
+    //设置几个回调
+    // using ConnectCallBack=std::function<void(const PtrConnection&)>;
+    // using MessagCallBack=std::function<void(const PtrConnection&,Buffer*)>;
+    // using CloseCallBack=std::function<void(const PtrConnection&)>;
+    // using EventCallBack=std::function<void(const PtrConnection&)>;
+    void SetConnectCallBack(const ConnectCallBack& cb){_connect_callback=cb;}
+    void SetMessagCallBack(const MessagCallBack& cb){_message_callback=cb;}
+    void SetCloseCallBack(const CloseCallBack& cb){_close_callback=cb;}
+    void SetEventCallBack(const EventCallBack& cb){_event_callback=cb;}
+    void SetServeCloseCallBack(const CloseCallBack& cb ){_server_close_callback=cb;}
+    //将数据从接收缓冲区移动到发送缓冲区
+    void Send(char* date,int len)
+    {
+        Buffer buff;
+        buff.WriteAndPush(date,len);
+        _loop->RunInLoop(std::bind(&Connection::SendInLoop,this,buff));
+    }
+    //开启定时任务
+    void StartTimerTask(int sec)
+    {
+        _loop->RunInLoop(std::bind(&Connection::StartTimerTaskInLoop,this,sec));
+    }
+    //取消定时任务
+    void CancleTimerTask()
+    {
+        _loop->RunInLoop(std::bind(&Connection::CancleTimerTaskInLoop,this));
+
+    }
+    //真正的关闭
+    void Release()
+    {
+        _loop->RunInLoop(std::bind(&Connection::ReleaseInLoop,this));
+    }
+    //关闭--不是真正的关闭
+    void ShutDown()
+    {
+        _loop->RunInLoop(std::bind(&Connection::ShutDownInLoop,this));
+    }
+    //对象建立好后需要调用这个
+    //需要一个连接去启动可读，主要是因为此时启动了定时任务，就可能出现问题，我们需要执行连接的回调
+    void Connect()
+    {
+        _loop->RunInLoop(std::bind(&Connection::ConnectInLoop,this));
+    }
+    void UpGard(const Any& context,
+        const ConnectCallBack& connect_callback,
+        const MessagCallBack& message_callback,
+        const CloseCallBack& close_callback,
+        const EventCallBack& event_callback
+    )
+    {
+        _loop->RunInLoop(std::bind(&Connection::UpGardInLoop,this,context,connect_callback
+                        ,message_callback,close_callback,event_callback));
+
+    }
+private:
+    int _conn_id;           //连接的id
+    int _sockfd;            //连接的sockfd
+    EventLoop* _loop;
+    Socket _socket;
+    Channel _channel;
+    ConnectStatu _statu;    //连接的状态
+    bool _istrue_timer;    //是否进行定时
+    Buffer _in_buffer;      //输入缓冲区
+    Buffer _out_buffer;     //输出缓冲区
+
+    Any _context;
+    //这四个需要组件使用者提供
+    ConnectCallBack _connect_callback;
+    MessagCallBack _message_callback;
+    CloseCallBack _close_callback;
+    EventCallBack _event_callback;
+
+    CloseCallBack _server_close_callback;   
+};
