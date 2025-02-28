@@ -16,6 +16,7 @@ int main()
         std::cout<<buffer<<std::endl;
         cut--;
         if(cut==0) sleep(100);
-        else sleep(1);  
+        else sleep(1); 
+        //sleep(100); 
     }
 }

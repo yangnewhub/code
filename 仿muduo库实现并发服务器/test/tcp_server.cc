@@ -44,7 +44,10 @@
 // MessagCallBack _message_callback;
 // CloseCallBack _close_callback;
 // EventCallBack _event_callback;
-//CloseCallBack _server_close_callback;   
+//CloseCallBack _server_close_callback;    
+EventLoop loop;
+LoopThreadPool pool(&loop);
+
 using PtrConnection=std::shared_ptr<Connection>;
 std::unordered_map<int,PtrConnection> conns;
 int times = rand()%10000;
@@ -60,7 +63,7 @@ void OMessage(const PtrConnection& coon, Buffer* buff)
 
     const char *s="nihao";
     coon->Send((char*)s,strlen(s));
-    coon->ShutDown();
+    //coon->ShutDown();
 }
 void Close(const PtrConnection& coon)
 {
@@ -70,22 +73,22 @@ void ServeClose(const PtrConnection& coon)
 {
     conns.erase(times);
 }
-void Accept( EventLoop* loop,Channel* channel)
+void Accept(int fd)
 {
-    int newfd=accept(channel->Fd(),nullptr,nullptr);
-    if(newfd < 0) {return ;}
+    // int newfd=accept(channel->Fd(),nullptr,nullptr);
+    // if(newfd < 0) {return ;}
     
-
-    PtrConnection conn (new Connection(loop,times,newfd));
+    
+    PtrConnection conn (new Connection(pool.NextLoop(),times,fd));
     conns[times]=conn;
     conn->SetConnectCallBack(std::bind(Connect,std::placeholders::_1));
     conn->SetMessagCallBack(std::bind(OMessage,std::placeholders::_1,std::placeholders::_2));
     conn->SetServeCloseCallBack(std::bind(ServeClose,std::placeholders::_1));
     conn->SetCloseCallBack(std::bind(Close,std::placeholders::_1));
 
-    conn->StartTimerTask(10);
+    conn->StartTimerTask(1);
     conn->Connect();
-    
+
     // nchannel->SetReadCallBack(std::bind(HandleRead,nchannel));
     // nchannel->SetWriteCallBack(std::bind(HandleWrite,nchannel));
     // nchannel->SetErrCallBack(std::bind(HandleErr,nchannel));
@@ -99,12 +102,15 @@ int main()
 {
     srand(time(NULL));
 
-    EventLoop loop;
-    Socket listen_socfd;
-    listen_socfd.CreateServerConnect(8081);
-    Channel channel(&loop,listen_socfd.Sockfd());
-    channel.SetReadCallBack(std::bind(&Accept,&loop,&channel));
-    channel.EnableRead();   
-  
+   
+    pool.SetThreadCount(2);
+    // Socket listen_socfd;
+    // listen_socfd.CreateServerConnect(8081);
+    // Channel channel(&loop,listen_socfd.Sockfd());
+    // channel.SetReadCallBack(std::bind(&Accept,&loop,&channel));
+    // channel.EnableRead();   
+    Accepter accepter(&loop,8081);
+    accepter.SetAccepterCallBack(std::bind(Accept,std::placeholders::_1));
+    accepter.Listen();
     loop.Start();
 }

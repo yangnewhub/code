@@ -17,6 +17,7 @@
 #include <thread>
 #include <sys/eventfd.h>
 #include <mutex>
+#include <condition_variable>
 #include <unordered_map>
 #include <sys/timerfd.h>
 #include <assert.h>
@@ -179,7 +180,12 @@ public:
             ERR_LOG("create socket fail");
             return false;
         }
+
+        int val = 1;
+            setsockopt(_sockfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, (void*)&val, sizeof(int)); 
         return true;
+
+
     }
     //绑定
     bool Bind(const std::string &ip ,uint16_t port)
@@ -485,7 +491,10 @@ public:
         for(int i=0;i<n;i++)
         {
             int fd=_events[i].data.fd;
-            _channels[fd]->SetREvent(_events[i].events);
+            auto it = _channels.find(fd);
+            assert(it != _channels.end());
+            
+            it->second->SetREvent(_events[i].events);
             active->push_back(_channels[fd]);
         }
     }
@@ -729,8 +738,12 @@ public:
     //判断将要执行的任务是否处于当前线程中，如果是则执行，不是则压入队列。
     void RunInLoop(const Factor &cb) {
         if (InThisThread()) {
+            //DBG_LOG("yes");
             return cb();
+            
         }
+        //DBG_LOG("no");
+
         return PushTask(cb);
     }
     //将任务压入任务池
@@ -765,11 +778,81 @@ private:
     TimerWheel _timewheel;                      //时间轮
 };
 
+//eventloop和线程进行绑定，进行eventloop的创建和初始化
+class LoopThread
+{
+private:
+    void CreateAndStartEventLoop()
+    {
+        //先创建一个loop
+        EventLoop loop;
+        {
+            //加锁进行赋值，然后条件条件变量
+            std::unique_lock<std::mutex> lock(_mutex);
+            _loop=&loop;
+            _cond.notify_all();
+        }
+        //启动loop
+        _loop->Start();
+    }
+public:
+    LoopThread()
+        :_thread(std::thread(&LoopThread::CreateAndStartEventLoop,this)),_loop(nullptr)
+    {}
+    EventLoop* GetLoop()
+    {
+        EventLoop * loop=nullptr;
+        {
+            std::unique_lock<std::mutex> lock(_mutex);
+            _cond.wait(lock,[&](){return _loop!=nullptr;});
+            loop=_loop;
+        }
+        return loop;
+    }
+private:
+    EventLoop* _loop;      
+    std::thread _thread;     //线程的
+    std::mutex _mutex;             //锁
+    std::condition_variable _cond; //条件变量
+};
 
+class LoopThreadPool
+{
+public:
+    LoopThreadPool(EventLoop *acceptloop)
+        :_thread_count(0),_pos_thread(0),_acceptloop(acceptloop)
+    {}
+    void SetThreadCount(int count)
+    {
+        _thread_count=count;
+        if(count>0)
+        {
+            _threads.resize(count);
+            _loops.resize(count);
+            for(int i=0;i<count;i++)
+            {
+                _threads[i]=new LoopThread();
+                _loops[i]=_threads[i]->GetLoop();
+            }
+        }
+    }
+    EventLoop* NextLoop()
+    {
+        if(_thread_count==0) return _acceptloop;
+        _pos_thread=(_pos_thread+1)%_thread_count;
+        return _loops[_pos_thread];
+    }
+
+private:
+    int _thread_count;       //从属线程的数量
+    std::vector<LoopThread*> _threads;//所有的从属线程
+    std::vector<EventLoop*> _loops;//所有的evetnloop
+    int _pos_thread;         //下一个线程
+    EventLoop *_acceptloop; //接受连接的eventloop
+
+};
 void Channel::Remove(){ _eventloop->Erase(this);}
 void Channel::Update(){ _eventloop->Update(this);}
-
-
  //增加
  void TimerWheel::TimerAdd(int id, const Factor& task,int timeout)
  {
@@ -778,6 +861,7 @@ void Channel::Update(){ _eventloop->Update(this);}
  //刷新
  void TimerWheel::TimerReferesh(int id)
  {
+    //DBG_LOG("执行刷新");
      _loop->RunInLoop(std::bind(&TimerWheel::TimerRefereshInLoop,this,id));
  }
 
@@ -999,8 +1083,7 @@ private:
                 _channel.EnableWrite();
             }
         }
-
-        if(_out_buffer.EnableReadSize()==0)
+        else if(_out_buffer.EnableReadSize()==0)
         {   
             return Release();
         }
@@ -1079,7 +1162,10 @@ public:
     //真正的关闭
     void Release()
     {
-        _loop->RunInLoop(std::bind(&Connection::ReleaseInLoop,this));
+        //_loop->RunInLoop(std::bind(&Connection::ReleaseInLoop,this));
+        //注意这里必须加入任务队列，去执行，不然会出现野指针，如果RunInLoop在当前线程就会立即执行
+        //但是任务队列中还可能会有任务，例如定时刷新的，此时已经释放，再执行就会出问题
+        _loop->PushTask(std::bind(&Connection::ReleaseInLoop,this));
     }
     //关闭--不是真正的关闭
     void ShutDown()
@@ -1122,4 +1208,40 @@ private:
     EventCallBack _event_callback;
 
     CloseCallBack _server_close_callback;   
+};
+
+
+class Accepter
+{
+    using AccepteCallBack = std::function<void(int)>;
+private:
+    void HandlerRead()
+    {
+
+        //调用accept
+        int nfd=_socket.Accept();
+        if(nfd<0) return;
+        //使用服务器给的回调
+        if(_accept_callback)_accept_callback(nfd);
+
+    }
+    int CreateServer(int port)
+    {
+        bool ret=_socket.CreateServerConnect(port);
+        assert(ret==true);
+        return _socket.Sockfd();
+    }
+public:
+    Accepter(EventLoop *loop,int port)
+        :_socket(CreateServer(port)),_loop(loop),_channel(loop,_socket.Sockfd())
+    {
+        _channel.SetReadCallBack(std::bind(&Accepter::HandlerRead,this));
+    }
+    void SetAccepterCallBack(const AccepteCallBack& cb){_accept_callback=cb;}
+    void Listen(){_channel.EnableRead();}
+private:
+    Socket _socket;
+    Channel _channel;
+    EventLoop* _loop;
+    AccepteCallBack _accept_callback;
 };
