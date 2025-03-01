@@ -929,9 +929,10 @@ enum ConnectStatu
     CONNECTED,    //连接
     DISCONNECTING //半关闭--准备关闭
 };
+class Connection;
+using PtrConnection=std::shared_ptr<Connection>;
 class Connection: public std::enable_shared_from_this<Connection>
 { 
-    using PtrConnection=std::shared_ptr<Connection>;
     using ConnectCallBack=std::function<void(const PtrConnection&)>;
     using MessagCallBack=std::function<void(const PtrConnection&,Buffer*)>;
     using CloseCallBack=std::function<void(const PtrConnection&)>;
@@ -1115,7 +1116,7 @@ private:
         _event_callback=event_callback;
     }
 public:
-    Connection(EventLoop* loop,int id,int sockfd)
+        Connection(EventLoop* loop,int id,int sockfd)
         :_loop(loop),_conn_id(id),_sockfd(sockfd),_socket(sockfd),
         _channel(loop,sockfd),_istrue_timer(false),_statu(CONNECTING)
     {
@@ -1125,6 +1126,10 @@ public:
         _channel.SetCloseCallBack(std::bind(&Connection::HandlerClose,this));
         _channel.SetEventsCallBack(std::bind(&Connection::HandlerEvent,this));
 
+    }
+    ~Connection()
+    {
+        //DBG_LOG("connectin break");
     }
     int Id(){return _conn_id;}
     int Fd(){return _sockfd;}
@@ -1244,4 +1249,89 @@ private:
     Channel _channel;
     EventLoop* _loop;
     AccepteCallBack _accept_callback;
+};
+
+class TcpServer
+{ 
+    using Functor=std::function<void()>;
+    using ConnectCallBack=std::function<void(const PtrConnection&)>;
+    using MessagCallBack=std::function<void(const PtrConnection&,Buffer*)>;
+    using CloseCallBack=std::function<void(const PtrConnection&)>;
+    using EventCallBack=std::function<void(const PtrConnection&)>;
+private:
+    void NectConnect(int fd)
+    {
+        _id++;
+        PtrConnection conn (new Connection(_pool.NextLoop(),_id,fd));
+        _conns[_id]=conn;
+        conn->SetConnectCallBack(_connect_callback);
+        conn->SetMessagCallBack(_message_callback);
+        conn->SetCloseCallBack(_close_callback);
+        conn->SetEventCallBack(_event_callback);
+        conn->SetServeCloseCallBack(std::bind(&TcpServer::RemoveConnect,this,std::placeholders::_1));
+        if(_enable_timer_release) conn->StartTimerTask(_timeout);
+
+        conn->Connect();
+    }
+    void AddTimerTaskInLoop(const Functor &task, int delay)
+    {
+        _id++;
+        _acceptloop.TimerAdd(_id, task,delay);
+    }
+    void RemoveConnectInLoop(const PtrConnection& coon)
+    {
+        int id=coon->Id();
+        auto it=_conns.find(id);
+        if(it!=_conns.end())
+        {
+            _conns.erase(it);
+        }
+    }
+    void RemoveConnect(const PtrConnection& coon)
+    {
+        _acceptloop.RunInLoop(std::bind(&TcpServer::RemoveConnectInLoop,this,coon));
+    }
+public: 
+    TcpServer(int port):
+        _port(port),
+        _id(0),
+        _accepter(&_acceptloop,port),
+        _pool(&_acceptloop),
+        _enable_timer_release(false)
+        {
+            _accepter.SetAccepterCallBack(std::bind(&TcpServer::NectConnect,this,std::placeholders::_1));
+        }
+    //设置线程池的数量
+    void SetThreadPoolCount(int count){_pool.SetThreadCount(count);}
+    //设置四个回调
+    void SetConnectCallBack(const ConnectCallBack& cb){_connect_callback=cb;}
+    void SetMessagCallBack(const MessagCallBack& cb){_message_callback=cb;}
+    void SetCloseCallBack(const CloseCallBack& cb){_close_callback=cb;}
+    void SetEventCallBack(const EventCallBack& cb){_event_callback=cb;}
+    //开启定时任务
+    void StartTimerTask(int timeout){_timeout=timeout;_enable_timer_release=true;}
+    //添加定时任务
+    void AddTimerTask(const Functor &task, int delay)
+    {
+        _acceptloop.RunInLoop(std::bind(&TcpServer::AddTimerTaskInLoop,this,task,delay));
+    }   
+    //服务器启动
+    void Start(){_accepter.Listen();_acceptloop.Start();}
+
+private:
+    int _id; 
+    int _port;                                          //端口
+    EventLoop _acceptloop;                              //accepter的eventloop
+    Accepter _accepter;     
+    LoopThreadPool _pool;                               //线程池
+    std::unordered_map<int, PtrConnection> _conns;      //每一个连接都有一个id
+    int _timeout;                                       //超时时间
+    bool _enable_timer_release;                         //是否开始超市任务
+
+    //组件使用者提供的回调
+   
+    ConnectCallBack _connect_callback;
+    MessagCallBack _message_callback;
+    CloseCallBack _close_callback;
+    EventCallBack _event_callback;
 };

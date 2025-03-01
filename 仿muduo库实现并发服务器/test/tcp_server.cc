@@ -45,12 +45,42 @@
 // CloseCallBack _close_callback;
 // EventCallBack _event_callback;
 //CloseCallBack _server_close_callback;    
-EventLoop loop;
-LoopThreadPool pool(&loop);
+// EventLoop loop;
+// LoopThreadPool pool(&loop);
 
-using PtrConnection=std::shared_ptr<Connection>;
-std::unordered_map<int,PtrConnection> conns;
-int times = rand()%10000;
+//using PtrConnection=std::shared_ptr<Connection>;
+// std::unordered_map<int,PtrConnection> conns;
+// int times = rand()%10000;
+
+// void ServeClose(const PtrConnection& coon)
+// {
+//     conns.erase(times);
+// }
+// void Accept(int fd)
+// {
+//     // int newfd=accept(channel->Fd(),nullptr,nullptr);
+//     // if(newfd < 0) {return ;}
+    
+    
+//     PtrConnection conn (new Connection(pool.NextLoop(),times,fd));
+//     conns[times]=conn;
+//     conn->SetConnectCallBack(std::bind(Connect,std::placeholders::_1));
+//     conn->SetMessagCallBack(std::bind(OMessage,std::placeholders::_1,std::placeholders::_2));
+//     conn->SetServeCloseCallBack(std::bind(ServeClose,std::placeholders::_1));
+//     conn->SetCloseCallBack(std::bind(Close,std::placeholders::_1));
+
+//     conn->StartTimerTask(1);
+//     conn->Connect();
+
+//     // nchannel->SetReadCallBack(std::bind(HandleRead,nchannel));
+//     // nchannel->SetWriteCallBack(std::bind(HandleWrite,nchannel));
+//     // nchannel->SetErrCallBack(std::bind(HandleErr,nchannel));
+//     // nchannel->SetEventsCallBack(std::bind(HandleEvent,nchannel,loop,times));
+//     // //定时任务，10秒后没有没有反应就关闭
+//     // loop->TimerAdd(times,std::bind(&HandleClose,nchannel),10);
+//     // nchannel->EnableRead();
+
+// }
 void Connect(const PtrConnection& coon)
 {
     DBG_LOG("new connect success,%p",coon.get());
@@ -69,48 +99,14 @@ void Close(const PtrConnection& coon)
 {
     DBG_LOG("now close ");
 }
-void ServeClose(const PtrConnection& coon)
-{
-    conns.erase(times);
-}
-void Accept(int fd)
-{
-    // int newfd=accept(channel->Fd(),nullptr,nullptr);
-    // if(newfd < 0) {return ;}
-    
-    
-    PtrConnection conn (new Connection(pool.NextLoop(),times,fd));
-    conns[times]=conn;
-    conn->SetConnectCallBack(std::bind(Connect,std::placeholders::_1));
-    conn->SetMessagCallBack(std::bind(OMessage,std::placeholders::_1,std::placeholders::_2));
-    conn->SetServeCloseCallBack(std::bind(ServeClose,std::placeholders::_1));
-    conn->SetCloseCallBack(std::bind(Close,std::placeholders::_1));
 
-    conn->StartTimerTask(1);
-    conn->Connect();
-
-    // nchannel->SetReadCallBack(std::bind(HandleRead,nchannel));
-    // nchannel->SetWriteCallBack(std::bind(HandleWrite,nchannel));
-    // nchannel->SetErrCallBack(std::bind(HandleErr,nchannel));
-    // nchannel->SetEventsCallBack(std::bind(HandleEvent,nchannel,loop,times));
-    // //定时任务，10秒后没有没有反应就关闭
-    // loop->TimerAdd(times,std::bind(&HandleClose,nchannel),10);
-    // nchannel->EnableRead();
-
-}
 int main()
 {
-    srand(time(NULL));
-
-   
-    pool.SetThreadCount(2);
-    // Socket listen_socfd;
-    // listen_socfd.CreateServerConnect(8081);
-    // Channel channel(&loop,listen_socfd.Sockfd());
-    // channel.SetReadCallBack(std::bind(&Accept,&loop,&channel));
-    // channel.EnableRead();   
-    Accepter accepter(&loop,8081);
-    accepter.SetAccepterCallBack(std::bind(Accept,std::placeholders::_1));
-    accepter.Listen();
-    loop.Start();
+    TcpServer server(8081);
+    server.SetThreadPoolCount(2);
+    server.SetConnectCallBack(Connect);
+    server.SetMessagCallBack(OMessage);
+    server.SetCloseCallBack(Close);
+    server.StartTimerTask(5);
+    server.Start();
 }
