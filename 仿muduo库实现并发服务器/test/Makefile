@@ -5,4 +5,4 @@ client:tcp_client.cc
 	g++ -o $@ $^  -std=c++14 -lpthread -g
 .PHONY:clean
 clean :
-	rm -rf server client
+	rm -rf server client	
