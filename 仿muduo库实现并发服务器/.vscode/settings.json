@@ -52,6 +52,10 @@
         "thread": "cpp",
         "condition_variable": "cpp",
         "mutex": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "fstream": "cpp",
+        "bitset": "cpp",
+        "regex": "cpp",
+        "sstream": "cpp"
     }
 }

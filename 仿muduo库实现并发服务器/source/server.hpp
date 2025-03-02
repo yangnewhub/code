@@ -43,6 +43,7 @@
 
 
 #define BUFFERMAX 1024
+#define  NWELIN  "\r\n"
 //读取和发送用一个数组标识，需要读偏移和写偏移
 class Buffer
 {
@@ -126,6 +127,7 @@ public:
     }
 
     //读取数据
+    
     void Read(void* date,int len)
     {
         assert(len<=EnableReadSize());
@@ -151,7 +153,25 @@ public:
         ReadAndPop(&date[0],len);
         return date;
     }
-
+    //获取一行
+    char *FindCRLF() {
+        char *res = (char*)memchr(ReadAddress(), '\n', EnableReadSize());
+        return res;
+    }
+    /*通常获取一行数据，这种情况针对是*/
+    std::string GetLine() {
+        char *pos = FindCRLF();
+        if (pos == NULL) {
+            return "";
+        }
+        // +1是为了把换行字符也取出来。
+        return ReadString(pos - ReadAddress() + 1);
+    }
+    std::string GetLineAndPop() {
+        std::string str = GetLine();
+        ReadMove(str.size());
+        return str;
+    }
     //清空缓冲区
     void Clear()
     {
@@ -160,6 +180,7 @@ public:
     }
 
     std::vector<char> Buffers(){return _buffer;}
+    
 private:
     int _read_pos;               //读偏移
     int _write_pos;              //写偏移
