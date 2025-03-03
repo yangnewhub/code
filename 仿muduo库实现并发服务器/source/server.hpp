@@ -348,7 +348,7 @@ private:
 
 class Poller;
 class EventLoop;
-//处理单个连接
+//对描述符IO进行管理
 class Channel
 {
     using CallBack = std::function<void()>;

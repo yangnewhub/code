@@ -446,7 +446,7 @@ public:
     HttpResponse(int statu):_redirect_flag(false),_statu(statu){}
 
     //查询头部是否存在
-    bool HasHeander(const std::string& key)
+    bool HasHeander(const std::string& key) 
     {
         auto it = _heads.find(key);
         if(it==_heads.end())
@@ -538,6 +538,8 @@ private:
         //读到了，需要进行解析
         if(PraseLine(line))
         {
+            //DBG_LOG("首行解析完成");
+
             //解析成功，修改一下状态
             _rewait=RE_HEAD;
             return true;
@@ -551,7 +553,8 @@ private:
     {
         // GET /a/b/c?password=123&user=aaa HTTP/1.1
         std::smatch match;
-        std::regex c("(GET|POST|DELETE|HEAD) ([^?]*)(?:\\?(.*))? (HTTP/1\\.[01])(?:\r\n|\rn)?");
+        //忽略大小写 他可能会有get
+        std::regex c("(GET|POST|DELETE|HEAD) ([^?]*)(?:\\?(.*))? (HTTP/1\\.[01])(?:\r\n|\rn)?",std::regex::icase);
         int ret = std::regex_match(line,match,c);
         if(ret==false)
         {
@@ -560,6 +563,9 @@ private:
         } 
 
         _request._menoth=match[1];
+        //将小写转为大写
+        std::transform( _request._menoth.begin(), _request._menoth.end(), _request._menoth.begin(),::toupper);
+        
         _request._path=Util::DeCode(match[2],false);
         _request._version=match[4];
         //字符串
@@ -573,6 +579,7 @@ private:
             Util::Spilt(x,"=",&v);
             _request.InsertParams(Util::DeCode(v[0],true),Util::DeCode(v[1],true));
         }
+
         return true;
     }
     //获取头部
@@ -599,6 +606,7 @@ private:
             //退出
             if(line=="\r\n"||line=="\n")
             {
+                //DBG_LOG("头部解析完成");
                 _rewait=RE_BODY;
                 return true;
             }
@@ -633,10 +641,17 @@ private:
     bool GetBody(Buffer* buf)
     {
         if(_rewait!=RE_BODY) return false;
+        //DBG_LOG("进入正文");
+
         //先获取正文的长度
         int body_size = _request.GetBodySize();
         //为0直接true
-        if(body_size==0) return true;
+        if(body_size==0) 
+        {
+            //DBG_LOG("正文长度 0");
+            _rewait=RE_OVER;
+            return true;
+        }
         //不为0看缓冲区中够不够
         //需要的长度
         int len =  body_size - _request._body.size();
@@ -645,16 +660,26 @@ private:
         {
             _request._body.append(buf->ReadAddress(),len);
             buf->ReadMove(len);
+
             _rewait=RE_OVER;
+
+            //DBG_LOG("正文完成");
             return true;
         }
         //不够就先读取有的
         _request._body.append(buf->ReadAddress(),buf->EnableReadSize());
         buf->ReadMove(buf->EnableReadSize());
+
         return true;
     }
 public:
     HttpContext():_statu(200),_rewait(RE_LINK){}
+    void Clear()
+    {
+        _statu=200;
+        _rewait=RE_LINK;
+        _request.Clear();
+    }
     int Statu(){return _statu;}
     RequestWait NowWait(){return _rewait;}
     HttpRequest Request(){return _request;}
@@ -669,3 +694,215 @@ private:
     RequestWait _rewait;        //当前的状态
     HttpRequest _request;
 };
+
+//将request请求转化为response
+class HttpServer
+{
+    using Handler = std::function<void(const HttpRequest &, HttpResponse *)>;
+    using Handlers = std::vector<std::pair<std::regex, Handler>>;
+private :
+    void ErrorHandler(const HttpRequest &req, HttpResponse *rsp) {
+        //1. 组织一个错误展示页面
+        std::string body;
+        body += "<html>";
+        body += "<head>";
+        body += "<meta http-equiv='Content-Type' content='text/html;charset=utf-8'>";
+        body += "</head>";
+        body += "<body>";
+        body += "<h1>";
+        body += std::to_string(rsp->_statu);
+        body += " ";
+        body += Util::StatuMessage(rsp->_statu);
+        body += "</h1>";
+        body += "</body>";
+        body += "</html>";
+        //2. 将页面数据，当作响应正文，放入rsp中
+        rsp->SetBody(body, "text/html");
+    }
+    void WriteResponse(const PtrConnection& conn,const HttpRequest &req, HttpResponse* rsp)
+    {
+        //先对rsp进行完善
+        //是否是长连接   正文长度 类型 是否进行重定向  
+        if(rsp->Close()==false)
+        {
+            rsp->InsertHeader("Connection", "close");
+        }
+        if(!rsp->_body.empty()&&!rsp->HasHeander("Content-Length"))
+        {
+            rsp->InsertHeader("Content-Length",std::to_string(rsp->_body.size()));
+        }
+        if (!rsp->_body.empty() && !rsp->HasHeander("Content-Type") ) 
+        {
+            rsp->InsertHeader("Content-Type", "application/octet-stream");
+        }
+        if (rsp->_redirect_flag) 
+        {
+            rsp->InsertHeader("Location", rsp->_redirect_url);
+        }
+        //将rsp响应生产string
+        std::string ret;
+        ret+=req._version+" "+std::to_string(rsp->_statu)+" "+_statu_msg[rsp->_statu]+"\r\n";
+        for(auto it:rsp->_heads)
+        {
+            ret+=it.first+": "+it.second+"\r\n";
+        }
+        ret+="\r\n";
+        ret+=rsp->_body;
+        //DBG_LOG("%s",ret.c_str());
+        //将响应发送给输出缓冲区
+        conn->Send((char*)ret.c_str(),ret.size());
+    }
+    bool IsStaticRes(const HttpRequest &req, HttpResponse* rsp)
+    {
+        //静态路径不为空
+        if(_basedir.empty()) return false;
+        //请求方法为get head
+        if(req._menoth!="GET"&&req._menoth!="HEAD") return false;
+        //请求的路径需要合法
+        if(!Util::PathIsVaile(req._path)) return false;
+        //如果请求为/ 需要为普通文件
+        std::string path = _basedir + req._path;
+        if(req._path.back()=='/')
+        {
+            path+="index.html";
+        }
+        if(!Util::FileIsRegular(path))  return false;
+
+        return true;
+    }
+    void StaticRes(HttpRequest &req, HttpResponse* rsp)
+    {
+        //当请求为/需要修改路径
+        if(req._path.back()=='/') req._path+="index.html";
+
+        //根据路径读文件并且将内存写入rsp
+        Util::ReadFile(req._path,(char*)rsp->_body.c_str());
+        return;
+    }
+    void Dispatcher(HttpRequest &req, HttpResponse* rsp,Handlers&  handlers)
+    {
+        for (auto &handler : handlers) 
+        {
+            const std::regex &re = handler.first;
+            const Handler &functor = handler.second;
+            bool ret = std::regex_match(req._path, req._matches, re);
+            if (ret == false) 
+            {
+                continue;
+            }
+            return functor(req, rsp);//传入请求信息，和空的rsp，执行处理函数
+        }
+        rsp->_statu = 404;
+    }
+    void Route(HttpRequest &req, HttpResponse* rsp)
+    {
+        //访问的是静态资源
+        if(IsStaticRes(req,rsp))  return StaticRes(req,rsp);
+
+        if (req._menoth == "GET" || req._menoth == "HEAD") return Dispatcher(req, rsp, _get_handler);
+        else if (req._menoth == "POST")  return Dispatcher(req, rsp, _post_handler);
+        else if (req._menoth == "PUT")   return Dispatcher(req, rsp, _put_handler);
+        else if (req._menoth == "DELETE")  return Dispatcher(req, rsp, _delete_handler);
+        
+        //都不是
+        rsp->_statu = 405;
+    }
+    void OnConnected(const PtrConnection &conn) 
+    {
+        conn->SetConText(HttpContext());
+        DBG_LOG("NEW CONNECTION %p", conn.get());
+    }
+    void OMessage(const PtrConnection& conn,Buffer* buf)
+    {  
+        while(buf->EnableReadSize()>0)
+        {
+            //先获取一个完整的req请求
+            HttpContext* context = conn->GetConText()->get<HttpContext>();
+            context->HttpParse(buf);
+            HttpRequest req=context->Request();
+            HttpResponse rsp(context->Statu());
+            //获取后看状态码》=400就返回一个错误的rsp
+            //DBG_LOG("获取一个请求");
+            if(context->Statu()>=400)
+            {
+                DBG_LOG("fail");
+                //需要一个错误页面
+                //根据错误页面得到一个响应
+                ErrorHandler(req,&rsp);
+                //将完整响应发送
+                WriteResponse(conn,req,&rsp);
+                //清理缓冲区
+                buf->ReadMove(buf->EnableReadSize());
+                context->Clear();
+                //结束
+                conn->ShutDown();
+                return ;
+            }
+            //请求不完整
+            if(context->NowWait()!=RE_OVER)  
+            {
+                //DBG_LOG("不完整");
+                return ;
+            }
+            //DBG_LOG("响应发送");
+            //正确就进行路由->判断是不是静态资源，静态资源就执行静态的，不是就执行对应的
+            Route(req,&rsp);
+            //此时会有一个res响应
+            //将响应发送出去
+            WriteResponse(conn,req,&rsp);
+            context->Clear();
+            //是一个短链接就结束
+            if(req.Close()) conn->ShutDown();
+        }
+
+    }
+public: 
+    HttpServer(int port,int timeout = 10)
+        :_server(port)
+    {
+        _server.StartTimerTask(timeout);
+        _server.SetMessagCallBack(
+            std::bind(&HttpServer::OMessage,this, 
+                      std::placeholders::_1,std::placeholders::_2));
+        _server.SetConnectCallBack(std::bind(&HttpServer::OnConnected,this, 
+            std::placeholders::_1));
+    }   
+    void SetBaseDir(const std::string &path) 
+    {
+        assert(Util::FileIsDir(path));
+        _basedir = path;
+    }
+    //设置/添加，请求（请求的正则表达）与处理函数的映射关系
+    void Get(const std::string &pattern, const Handler &handler) 
+    {
+        _get_handler.push_back(std::make_pair(std::regex(pattern), handler));
+    }
+    void Post(const std::string &pattern, const Handler &handler) 
+    {
+        _post_handler.push_back(std::make_pair(std::regex(pattern), handler));
+    }
+    void Put(const std::string &pattern, const Handler &handler) 
+    {
+        _put_handler.push_back(std::make_pair(std::regex(pattern), handler));
+    }
+    void Delete(const std::string &pattern, const Handler &handler) 
+    {
+        _delete_handler.push_back(std::make_pair(std::regex(pattern), handler));
+    }
+    void SetThreadCount(int count) 
+    {
+        _server.SetThreadPoolCount(count);
+    }
+    void Listen() 
+    {
+        _server.Start();
+    }
+private:
+    //请求资源时可能有/a/b1234这种，难道都加入一个表中吗，--正则表达式搞
+    Handlers _get_handler;
+    Handlers _post_handler;
+    Handlers _put_handler;
+    Handlers _delete_handler;
+    std::string _basedir;//静态目录
+    TcpServer _server;
+} ;  
