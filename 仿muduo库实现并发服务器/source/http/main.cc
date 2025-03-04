@@ -1,6 +1,6 @@
 #include "http.hpp"
 
-#define BASEDIR "./wwwroot"
+#define BASEDIR "wwwroot/"
 
 std::string RequestStr(const HttpRequest &req) 
 {

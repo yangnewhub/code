@@ -188,12 +188,15 @@ public:
 
         //进行读文件
         is.read(buf,len);
+        // buf[len]=0;
+        // DBG_LOG("文件：%s",buf);
         if (!is) 
         {
             std::cout << "error: only " << is.gcount() << " could be read";
             return false;
         }
         is.close();
+        //DBG_LOG("关文件");
         return true;
     }
     //写文件
@@ -301,11 +304,13 @@ public:
             //没有就返回一个字节流
             return "application/octet-stream";
         }
+        //DBG_LOG("有.  %s",filename.c_str());
         //有就初始化mime
         std::string mime = filename.substr(pos);
         auto it = _mime_msg.find(mime);
         if(it!=_mime_msg.end())
         {
+            //DBG_LOG("%s",it->second.c_str());
             return it->second;
         }
         return "application/octet-stream";
@@ -446,22 +451,30 @@ public:
     HttpResponse(int statu):_redirect_flag(false),_statu(statu){}
 
     //查询头部是否存在
-    bool HasHeander(const std::string& key) 
+    bool HasHeander(const std::string& key) const
     {
         auto it = _heads.find(key);
         if(it==_heads.end())
         {
+            DBG_LOG("没找到");
+
             return false;
         }
+
         return true;
     }
     //插入头部
     void InsertHeader(const std::string& key,const std::string& val)
     {
-        _heads[key]=val;
+        DBG_LOG("进入");
+        if(HasHeander(key)) return;
+        DBG_LOG("不存在");
+
+        _heads.insert(std::make_pair(key,val));
+        DBG_LOG("插入");
     }
     //查询头部的值
-    std::string GetHeaderVal(const std::string& key)
+    std::string GetHeaderVal(const std::string& key) const
     {
         auto it = _heads.find(key);
         if(it==_heads.end())
@@ -471,13 +484,13 @@ public:
         return it->second;
     }
         //判断是不是短连接
-    bool Close()
+    bool Close() const 
     {
         if(HasHeander("Connection")&&GetHeaderVal("Connection")=="keep-alive")  return false;
         return true;
     }
     //对所有数据进行清空
-    void Clear()
+    void Clear() 
     {
         _statu=200;
         _body.clear();
@@ -648,7 +661,7 @@ private:
         //为0直接true
         if(body_size==0) 
         {
-            //DBG_LOG("正文长度 0");
+            DBG_LOG("正文长度 0");
             _rewait=RE_OVER;
             return true;
         }
@@ -663,7 +676,7 @@ private:
 
             _rewait=RE_OVER;
 
-            //DBG_LOG("正文完成");
+            DBG_LOG("正文完成");
             return true;
         }
         //不够就先读取有的
@@ -748,35 +761,55 @@ private :
         }
         ret+="\r\n";
         ret+=rsp->_body;
-        //DBG_LOG("%s",ret.c_str());
+        DBG_LOG("%s",ret.c_str());
         //将响应发送给输出缓冲区
+
         conn->Send((char*)ret.c_str(),ret.size());
     }
     bool IsStaticRes(const HttpRequest &req, HttpResponse* rsp)
     {
         //静态路径不为空
         if(_basedir.empty()) return false;
+        DBG_LOG("静态路径不为空");
         //请求方法为get head
         if(req._menoth!="GET"&&req._menoth!="HEAD") return false;
+        DBG_LOG("请求方法为get head");
+
         //请求的路径需要合法
         if(!Util::PathIsVaile(req._path)) return false;
+        DBG_LOG("请求的路径需要合法");
+
         //如果请求为/ 需要为普通文件
         std::string path = _basedir + req._path;
-        if(req._path.back()=='/')
+        if(path.back()=='/')
         {
             path+="index.html";
         }
+        DBG_LOG("%s",path.c_str());
         if(!Util::FileIsRegular(path))  return false;
+        DBG_LOG("如果请求为/ 需要为普通文件");
 
         return true;
     }
-    void StaticRes(HttpRequest &req, HttpResponse* rsp)
+    void StaticRes(const HttpRequest &req, HttpResponse* rsp)
     {
+        std::string req_path = _basedir + req._path;
         //当请求为/需要修改路径
-        if(req._path.back()=='/') req._path+="index.html";
-
+        if(req_path.back()=='/') req_path+="index.html";
+        //DBG_LOG("%s",req_path.c_str());
         //根据路径读文件并且将内存写入rsp
-        Util::ReadFile(req._path,(char*)rsp->_body.c_str());
+        // char* buf;
+        // Util::ReadFile(req_path,buf);
+        // DBG_LOG("%s",buf);
+        Util::ReadFile(req_path,(char*)rsp->_body.c_str());
+        DBG_LOG("%s",rsp->_body.c_str());
+
+        std::string mime = Util::MiMeMessage(req_path);
+        DBG_LOG("%s",mime.c_str());
+
+        // rsp->SetBody(buf,mime);
+
+        //增加了属性
         return;
     }
     void Dispatcher(HttpRequest &req, HttpResponse* rsp,Handlers&  handlers)
@@ -796,14 +829,16 @@ private :
     }
     void Route(HttpRequest &req, HttpResponse* rsp)
     {
+        //DBG_LOG("%d -%s----",rsp->_statu,rsp->_body.c_str());
+
         //访问的是静态资源
         if(IsStaticRes(req,rsp))  return StaticRes(req,rsp);
-
+        DBG_LOG("非静态");
         if (req._menoth == "GET" || req._menoth == "HEAD") return Dispatcher(req, rsp, _get_handler);
         else if (req._menoth == "POST")  return Dispatcher(req, rsp, _post_handler);
         else if (req._menoth == "PUT")   return Dispatcher(req, rsp, _put_handler);
         else if (req._menoth == "DELETE")  return Dispatcher(req, rsp, _delete_handler);
-        
+        DBG_LOG("都不是");
         //都不是
         rsp->_statu = 405;
     }
@@ -811,6 +846,21 @@ private :
     {
         conn->SetConText(HttpContext());
         DBG_LOG("NEW CONNECTION %p", conn.get());
+    }
+
+    std::string RequestStr(const HttpRequest &req) 
+    {
+        std::stringstream ss;
+        ss << req._menoth << " " << req._path << " " << req._version << "\r\n";
+        for (auto &it : req._params) {
+            ss << it.first << ": " << it.second << "\r\n";
+        }
+        for (auto &it : req._heads) {
+            ss << it.first << ": " << it.second << "\r\n";
+        }
+        ss << "\r\n";
+        ss << req._body;
+        return ss.str();
     }
     void OMessage(const PtrConnection& conn,Buffer* buf)
     {  
@@ -821,8 +871,9 @@ private :
             context->HttpParse(buf);
             HttpRequest req=context->Request();
             HttpResponse rsp(context->Statu());
+            //DBG_LOG("%d -%s----",rsp._statu,rsp._body.c_str());
             //获取后看状态码》=400就返回一个错误的rsp
-            //DBG_LOG("获取一个请求");
+            DBG_LOG("%s",RequestStr(req).c_str());
             if(context->Statu()>=400)
             {
                 DBG_LOG("fail");
@@ -844,7 +895,7 @@ private :
                 //DBG_LOG("不完整");
                 return ;
             }
-            //DBG_LOG("响应发送");
+            DBG_LOG("响应发送");
             //正确就进行路由->判断是不是静态资源，静态资源就执行静态的，不是就执行对应的
             Route(req,&rsp);
             //此时会有一个res响应
