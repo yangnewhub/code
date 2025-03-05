@@ -168,7 +168,7 @@ public:
 
     }
     //读文件
-    static bool ReadFile(const std::string& filename,char* buf)
+    static bool ReadFile(const std::string& filename,std::string* buf)
     {
         std::ifstream is(filename.c_str(),std::ios::binary);
         if(!is.is_open())
@@ -176,6 +176,7 @@ public:
             std::cout<<"open file "<<filename<<"err"<<std::endl;
             return "";
         }
+       
         //获取文件的大小
         struct stat st;
         int n = stat(filename.c_str(),&st);
@@ -184,19 +185,22 @@ public:
             std::cout<<"stat err"<<std::endl;
             return false;
         }
-        int len=st.st_size;
+        long long len=st.st_size;
+        DBG_LOG("开始读");
+        //进行读文件     
+        buf->resize(len);
+        is.read(&((*buf)[0]),len);
+        DBG_LOG("[%lld]",len);
 
-        //进行读文件
-        is.read(buf,len);
+        DBG_LOG("[%s]",buf->c_str());
         // buf[len]=0;
-        // DBG_LOG("文件：%s",buf);
         if (!is) 
         {
             std::cout << "error: only " << is.gcount() << " could be read";
             return false;
         }
         is.close();
-        //DBG_LOG("关文件");
+        DBG_LOG("关文件");
         return true;
     }
     //写文件
@@ -378,6 +382,7 @@ public:
     //查询头部的值
     std::string GetHeaderVal(const std::string& key)
     {
+        //std::cout << "异常2" << std::endl;
         auto it = _heads.find(key);
         if(it==_heads.end())
         {
@@ -448,30 +453,36 @@ class HttpResponse
 {
 public:
     HttpResponse():_redirect_flag(false),_statu(200){}
-    HttpResponse(int statu):_redirect_flag(false),_statu(statu){}
+    HttpResponse(int statu):_redirect_flag(false),_statu(statu)
+    {
+        //std::cout << "异常1"  <<_heads.size() << std::endl;
+    }
 
     //查询头部是否存在
     bool HasHeander(const std::string& key) const
     {
+        //std::cout << "异常1" << std::endl;
         auto it = _heads.find(key);
         if(it==_heads.end())
         {
-            DBG_LOG("没找到");
+            //DBG_LOG("没找到");
 
             return false;
         }
 
+        //std::cout << "异常1" << std::endl;
         return true;
     }
     //插入头部
     void InsertHeader(const std::string& key,const std::string& val)
     {
-        DBG_LOG("进入");
+        //DBG_LOG("进入");
         if(HasHeander(key)) return;
-        DBG_LOG("不存在");
+        //DBG_LOG("不存在");
 
+        //std::cout << "插入" << std::endl;
         _heads.insert(std::make_pair(key,val));
-        DBG_LOG("插入");
+        //DBG_LOG("插入");
     }
     //查询头部的值
     std::string GetHeaderVal(const std::string& key) const
@@ -482,6 +493,8 @@ public:
             return "";
         }
         return it->second;
+
+        //std::cout << "异常2" << std::endl;
     }
         //判断是不是短连接
     bool Close() const 
@@ -567,7 +580,7 @@ private:
         // GET /a/b/c?password=123&user=aaa HTTP/1.1
         std::smatch match;
         //忽略大小写 他可能会有get
-        std::regex c("(GET|POST|DELETE|HEAD) ([^?]*)(?:\\?(.*))? (HTTP/1\\.[01])(?:\r\n|\rn)?",std::regex::icase);
+        std::regex c("(GET|POST|DELETE|HEAD|PUT) ([^?]*)(?:\\?(.*))? (HTTP/1\\.[01])(?:\r\n|\rn)?",std::regex::icase);
         int ret = std::regex_match(line,match,c);
         if(ret==false)
         {
@@ -603,6 +616,7 @@ private:
         {
             //先获取首行的数据
             std::string line = buf->GetLineAndPop();
+          
             if(line.size()==0)
             {
                 //就是没有找到换行符，如果buf太长就认为出现错误
@@ -635,8 +649,9 @@ private:
     }
     //解析头部
     bool PraseHead(std::string& line)
-    {
-        int pos = line.find(": ");
+    {  
+        
+        int pos  = line.find(": ");
         //没找到： 
         if(pos==std::string::npos)
         {
@@ -645,6 +660,8 @@ private:
             return false;
         }
         //找到了
+        if(line.back()=='\n') line.pop_back();
+        if(line.back()=='\r') line.pop_back();
         std::string key = line.substr(0,pos);
         std::string val = line.substr(pos+2);
         _request.InsertHeader(key,val);
@@ -661,7 +678,7 @@ private:
         //为0直接true
         if(body_size==0) 
         {
-            DBG_LOG("正文长度 0");
+            //DBG_LOG("正文长度 0");
             _rewait=RE_OVER;
             return true;
         }
@@ -761,7 +778,7 @@ private :
         }
         ret+="\r\n";
         ret+=rsp->_body;
-        DBG_LOG("%s",ret.c_str());
+        //DBG_LOG("%s",ret.c_str());
         //将响应发送给输出缓冲区
 
         conn->Send((char*)ret.c_str(),ret.size());
@@ -769,15 +786,18 @@ private :
     bool IsStaticRes(const HttpRequest &req, HttpResponse* rsp)
     {
         //静态路径不为空
-        if(_basedir.empty()) return false;
-        DBG_LOG("静态路径不为空");
+        if(_basedir.empty()) 
+            return false;
+        //DBG_LOG("静态路径不为空");
         //请求方法为get head
-        if(req._menoth!="GET"&&req._menoth!="HEAD") return false;
-        DBG_LOG("请求方法为get head");
+        if(req._menoth!="GET"&&req._menoth!="HEAD") 
+            return false;
+        //DBG_LOG("请求方法为get head");
 
         //请求的路径需要合法
-        if(!Util::PathIsVaile(req._path)) return false;
-        DBG_LOG("请求的路径需要合法");
+        if(!Util::PathIsVaile(req._path)) 
+            return false;
+        //DBG_LOG("请求的路径需要合法");
 
         //如果请求为/ 需要为普通文件
         std::string path = _basedir + req._path;
@@ -785,28 +805,28 @@ private :
         {
             path+="index.html";
         }
-        DBG_LOG("%s",path.c_str());
-        if(!Util::FileIsRegular(path))  return false;
-        DBG_LOG("如果请求为/ 需要为普通文件");
+        //DBG_LOG("%s",path.c_str());
+        if(!Util::FileIsRegular(path))  
+            return false;
+        //DBG_LOG("如果请求为/ 需要为普通文件");
 
         return true;
     }
     void StaticRes(const HttpRequest &req, HttpResponse* rsp)
     {
+        //DBG_LOG("进入");
         std::string req_path = _basedir + req._path;
         //当请求为/需要修改路径
         if(req_path.back()=='/') req_path+="index.html";
         //DBG_LOG("%s",req_path.c_str());
         //根据路径读文件并且将内存写入rsp
-        // char* buf;
-        // Util::ReadFile(req_path,buf);
-        // DBG_LOG("%s",buf);
-        Util::ReadFile(req_path,(char*)rsp->_body.c_str());
+        Util::ReadFile(req_path,&rsp->_body);
         DBG_LOG("%s",rsp->_body.c_str());
-
+        // Util::ReadFile(req_path,(char*)rsp->_body.c_str());
+        // DBG_LOG("%s",rsp->_body.c_str());
         std::string mime = Util::MiMeMessage(req_path);
-        DBG_LOG("%s",mime.c_str());
-
+        //DBG_LOG("%s",mime.c_str());
+        rsp->InsertHeader("Content-Type",mime);
         // rsp->SetBody(buf,mime);
 
         //增加了属性
@@ -829,7 +849,7 @@ private :
     }
     void Route(HttpRequest &req, HttpResponse* rsp)
     {
-        //DBG_LOG("%d -%s----",rsp->_statu,rsp->_body.c_str());
+        DBG_LOG("%d -%s----",rsp->_statu,rsp->_body.c_str());
 
         //访问的是静态资源
         if(IsStaticRes(req,rsp))  return StaticRes(req,rsp);
@@ -838,7 +858,7 @@ private :
         else if (req._menoth == "POST")  return Dispatcher(req, rsp, _post_handler);
         else if (req._menoth == "PUT")   return Dispatcher(req, rsp, _put_handler);
         else if (req._menoth == "DELETE")  return Dispatcher(req, rsp, _delete_handler);
-        DBG_LOG("都不是");
+        //DBG_LOG("都不是");
         //都不是
         rsp->_statu = 405;
     }
@@ -871,9 +891,11 @@ private :
             context->HttpParse(buf);
             HttpRequest req=context->Request();
             HttpResponse rsp(context->Statu());
+            //std::cout << "1哈希表的个数 : " << rsp._heads.size() << std::endl;
             //DBG_LOG("%d -%s----",rsp._statu,rsp._body.c_str());
             //获取后看状态码》=400就返回一个错误的rsp
-            DBG_LOG("%s",RequestStr(req).c_str());
+            DBG_LOG("[%s]",RequestStr(req).c_str());
+            DBG_LOG("%d",context->Statu());
             if(context->Statu()>=400)
             {
                 DBG_LOG("fail");
@@ -881,8 +903,10 @@ private :
                 //根据错误页面得到一个响应
                 ErrorHandler(req,&rsp);
                 //将完整响应发送
-                WriteResponse(conn,req,&rsp);
-                //清理缓冲区
+                WriteResponse(conn,req,&rsp); 
+
+                //需要重置一下，不然会导致死循环
+                //直接清理缓冲区
                 buf->ReadMove(buf->EnableReadSize());
                 context->Clear();
                 //结束
@@ -895,12 +919,15 @@ private :
                 //DBG_LOG("不完整");
                 return ;
             }
-            DBG_LOG("响应发送");
+            //DBG_LOG("响应发送");
+            //std::cout << "2哈希表的个数 : " << rsp._heads.size() << std::endl;
             //正确就进行路由->判断是不是静态资源，静态资源就执行静态的，不是就执行对应的
             Route(req,&rsp);
+            //std::cout << "3哈希表的个数 : " << rsp._heads.size() << std::endl;
             //此时会有一个res响应
             //将响应发送出去
             WriteResponse(conn,req,&rsp);
+            //std::cout << "哈希表的个数 : " << rsp._heads.size() << std::endl;
             context->Clear();
             //是一个短链接就结束
             if(req.Close()) conn->ShutDown();

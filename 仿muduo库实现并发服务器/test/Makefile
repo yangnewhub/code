@@ -1,8 +1,5 @@
-all:server client
-server:tcp_server.cc  
-	g++ -o $@ $^  -std=c++14 -lpthread -g
-client:tcp_client.cc  
-	g++ -o $@ $^  -std=c++14 -lpthread -g
+client:client1.cc
+	g++ -o $@ $^ -lpthread -std=c++14
 .PHONY:clean
-clean :
-	rm -rf server client	
+clean:
+	rm -rf client

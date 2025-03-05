@@ -83,6 +83,7 @@ public:
         {
             int capacity=Capacity()+1024;
             _buffer.resize(capacity);
+            DBG_LOG("扩容");
         }
     }
     void ReadMove(int len)
@@ -100,6 +101,7 @@ public:
         EnableWrite(len);
         char* d=(char*)date;
         std::copy(d,d+len-1,WriteAddress());
+        
     }
     void WriteAndPush(const void* date,int len)
     {
@@ -375,7 +377,11 @@ public:
     //是否监控了可写
     bool WriteAble(){return _events&EPOLLOUT;}
     //启动可读
-    void EnableRead(){_events|=EPOLLIN;Update();}
+    void EnableRead()
+    {
+        _events|=EPOLLIN;Update();
+        //std::cout << "启动读事件成功" << std::endl;
+    }
     //启动可写
     void EnableWrite(){_events|=EPOLLOUT;Update();}
     //关闭可读
@@ -951,6 +957,7 @@ enum ConnectStatu
     CONNECTED,    //连接
     DISCONNECTING //半关闭--准备关闭
 };
+#define MAXSIZEFILE 65535
 class Connection;
 using PtrConnection=std::shared_ptr<Connection>;
 class Connection: public std::enable_shared_from_this<Connection>
@@ -965,8 +972,8 @@ private:
     void HandlerRead()
     {
         //采用非阻塞读
-        char buffer[65536]={0};
-        int ret = _socket.NoBlackRecv(buffer,65535);
+        char buffer[MAXSIZEFILE]={0};
+        int ret = _socket.NoBlackRecv(buffer,MAXSIZEFILE-1);
         //当ret<0时就是出错了，需要关闭连接
         if(ret<0)
         {
