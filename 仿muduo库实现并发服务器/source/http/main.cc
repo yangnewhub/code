@@ -38,7 +38,7 @@ void DelFile(const HttpRequest &req, HttpResponse *rsp)
 int main()
 {
     HttpServer server(8888);
-    server.SetThreadCount(0);
+    server.SetThreadCount(2);
     server.SetBaseDir(BASEDIR);//设置静态资源根目录，告诉服务器有静态资源请求到来，需要到哪里去找资源文件
     server.Get("hello", Hello);
     server.Post("login", Login);

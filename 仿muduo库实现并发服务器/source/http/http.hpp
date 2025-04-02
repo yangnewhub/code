@@ -580,8 +580,8 @@ private:
         // GET /a/b/c?password=123&user=aaa HTTP/1.1
         std::smatch match;
         //忽略大小写 他可能会有get
-        std::regex c("(GET|POST|DELETE|HEAD|PUT) ([^?]*)(?:\\?(.*))? (HTTP/1\\.[01])(?:\r\n|\rn)?",std::regex::icase);
-        int ret = std::regex_match(line,match,c);
+        std::regex c("(GET|POST|DELETE|HEAD|PUT) ([^?]*)(?:\\?(.*))? (HTTP/1\\.[01])(?:\r\n|\n)?",std::regex::icase);
+        int ret = std::regex_match(line,match,c);s
         if(ret==false)
         {
             _statu  = 400;//Bad Request
@@ -818,7 +818,7 @@ private :
         std::string req_path = _basedir + req._path;
         //当请求为/需要修改路径
         if(req_path.back()=='/') req_path+="index.html";
-        //DBG_LOG("%s",req_path.c_str());
+        DBG_LOG("%s",req_path.c_str());
         //根据路径读文件并且将内存写入rsp
         Util::ReadFile(req_path,&rsp->_body);
         DBG_LOG("%s",rsp->_body.c_str());

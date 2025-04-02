@@ -1,5 +1,5 @@
 server:main.cc
-	g++ -o $@ $^  -g
+	g++ -o $@ $^
 .PHONY:clean
 clean:
 	rm -rf server

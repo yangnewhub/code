@@ -575,6 +575,7 @@ private:
         struct itimerspec newtime,oldtime;
         newtime.it_value.tv_nsec=0;   //第一次超时的毫秒 
         newtime.it_value.tv_sec=1;    //第一次超时的秒
+
         newtime.it_interval.tv_nsec=0;//第二次
         newtime.it_interval.tv_sec=1;
         int n = timerfd_settime(fd,0,&newtime,&oldtime);
