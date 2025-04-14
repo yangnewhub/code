@@ -1,4 +1,4 @@
-//34
+//54
 #include <iostream>
 #include <vector>
 #include <map>
@@ -25,13 +25,13 @@ int main()
             hash[i]++;
         }
     }
-    if(count+1<n-count) 
+    if(count*3<n) 
     {
         cout<<"Baka!";
         return 0;
     }
     auto it = hash.begin();
-    for(int i = 1;i<n;i+=2)
+    for(int i = 1;i<n;i+=3)
     {
         nums[i]=it->first;
         it++;
@@ -39,16 +39,20 @@ int main()
     int j = 0;
     while(it!=hash.end())
     {
-        nums[j]=it->first;
-        it++;
-        j+=2;
+        if(nums[j]!=0)
+        {
+            nums[j]=it->first;
+            it++;
+        }
+        j++;
     }
     for(int i=1;i<=n;i++)
     {
+        while(nums[j]!=0) j++;
         if(hash[i]==0)
         {
             nums[j]=i;
-            j+=2;
+            j++;
         }
     }
     for(auto x: nums) cout<<x<<" ";

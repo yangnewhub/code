@@ -10,7 +10,7 @@ using namespace std;
 int main()
 {
     long long n, m;
-    cin >>s n >> m;
+    cin >> n >> m;
     string s;
     cin >> s;
     vector<long long> diff(n - 1);
