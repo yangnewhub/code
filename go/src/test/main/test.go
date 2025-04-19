@@ -142,16 +142,175 @@
 
 //指针
 
+//分包
+// package main
+
+// import (
+//     "fmt"
+//     "test/test2"
+// )
+
+// func main(){
+//     fmt.Println(test2.StuNo)
+// }
+
+
+//输入
+
+// package main
+
+// import "fmt"
+
+// func main(){
+
+//     var age int
+//     var name string
+//     var score int
+//     fmt.Scanln(&age,&name,&score)
+//     fmt.Println(age,name,score)
+// }
+
+// package main
+
+// import "fmt"
+
+// func main(){
+
+//     var age int
+//     var name string
+//     var score int
+//     fmt.Scanf("%d %s %d",&age,&name,&score)
+//     fmt.Println(age,name,score)
+// }
+
+
+//分支
+
+// package main
+
+// import "fmt"
+
+// func main(){
+//     // if(false){
+//     //     fmt.Println("aa")
+//     // }else if(true){
+//     //     fmt.Println("abb")
+//     // }else 
+//     // {
+//     //     fmt.Println("cc")
+//     // }
+
+//     // var socre int = 88
+
+//     // switch socre/10 {
+//     //     case 8:
+//     //         fmt.Println("8")
+        
+//     //     case 7:
+//     //         fmt.Println("7")
+//     //     default:
+    
+//     // }
+
+//     // var sum int = 0
+//     // for i:=1;i<=5;i++{
+//     //     sum+=i
+//     // }
+//     // fmt.Println(sum)
+
+
+//     //死循环
+//     // for {
+//     //     fmt.Println("q")
+//     // }、
+
+//     // var str string ="abcde"
+//     // for i:=0 ;i<len(str);i++{
+//     //     fmt.Printf("%c",str[i])
+//     // }
+//     // for i,value :=range str{
+//     //     value='a'
+//     //     fmt.Println(i,value)
+//     // }
+//     // fmt.Println(str)
+//     lable:
+//     for i:=1;i<=5;i++{
+//         for j:=1;j<=5;j++{
+//             fmt.Printf("i=%v,j=%v\n",i,j)
+//             if(i==2&&j==2){
+//                 break lable
+//             }
+//         }
+//     }
+// }
+
+
+
+//函数
+
+// package main
+
+// import "fmt"
+ 
+// func Add(a int, b int)(int){
+//     return a+b
+//     //fmt.Println(a+b)
+// }
+ 
+// func Add2(a int, b int)(int,int){
+//     return a+b,b-a
+// }
+// func Swap(a *int,b *int)(){
+//     var c int = *a
+//     *a= *b
+//     *b=c
+// }
+
+// func test(args...int)(){
+//     //函数内部处理可变参数的时候,可以将参数切片处理
+//     //遍历:
+//     for i:=0;i<len(args);i++{
+//         fmt.Println(args[i])
+//     }
+
+//     for i,value := range args{
+//         fmt.Println(i,value)
+//     }
+// }
+
+
+
+// func main(){
+//     var ret int = Add(1,2)
+//     fmt.Println(ret)
+
+//     // Add(1,2)
+//     sum1,sub2:=Add2(1,2)
+//     fmt.Println(sum1,sub2)
+//     var a,b  = 1,2
+//     Swap(&a,&b)
+//     fmt.Println(a,b)
+
+//     test(1)
+//     test(1,2)
+
+  
+// }
 
 package main
 
-import (
-    "fmt"
-)
+import "fmt"
+import "test/test2"
 
+func test(num int)(){
+    fmt.Println(num)
+}
+
+func test2(num int , testfunc func(int)){
+    testfunc(num)
+}
 func main(){
-    var num int = 10
-    fmt.Println(&num)
+    test2(10,test)
 
-  
+    fmt.Printf(test2.Add(1,2))
 }
