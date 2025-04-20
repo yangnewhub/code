@@ -4,7 +4,7 @@
 //     fmt.Println("hello worlaaad")
 //         fmt.Println("hello worlaaad")
 
-// }   
+// }
 //变量
 
 // package main
@@ -20,7 +20,7 @@
 //     var age int
 //     age=18
 //     fmt.Println("age = ",age)
-    
+
 //     var age2 int = 19
 //     fmt.Println("age2 = ",age2)
 
@@ -29,7 +29,6 @@
 
 //     // var age3=1
 //     // age4 := 10
-    
 
 //     // var m1,m2 int
 //     var n4,name,n5 = 1,"tom",2
@@ -89,8 +88,6 @@
 
 // }
 
-
-
 // //布尔
 
 // package main
@@ -100,7 +97,6 @@
 //     var tmp bool = true
 
 // }
-
 
 // //字符串
 
@@ -116,13 +112,11 @@
 
 //     fmt.Println(s1,s2,s3)
 
-
-//     var n1 int =10   
+//     var n1 int =10
 //     var n2 float32 = float32(n1)
 // }
 
-
-//强制转化  
+//强制转化
 
 // package main
 
@@ -137,8 +131,7 @@
 //     var s string =  fmt.Sprintf("%t",n3)
 //     fmt.Printf("%v",s)
 
-// }   
-
+// }
 
 //指针
 
@@ -153,7 +146,6 @@
 // func main(){
 //     fmt.Println(test2.StuNo)
 // }
-
 
 //输入
 
@@ -183,7 +175,6 @@
 //     fmt.Println(age,name,score)
 // }
 
-
 //分支
 
 // package main
@@ -195,7 +186,7 @@
 //     //     fmt.Println("aa")
 //     // }else if(true){
 //     //     fmt.Println("abb")
-//     // }else 
+//     // }else
 //     // {
 //     //     fmt.Println("cc")
 //     // }
@@ -205,11 +196,11 @@
 //     // switch socre/10 {
 //     //     case 8:
 //     //         fmt.Println("8")
-        
+
 //     //     case 7:
 //     //         fmt.Println("7")
 //     //     default:
-    
+
 //     // }
 
 //     // var sum int = 0
@@ -217,7 +208,6 @@
 //     //     sum+=i
 //     // }
 //     // fmt.Println(sum)
-
 
 //     //死循环
 //     // for {
@@ -244,19 +234,17 @@
 //     }
 // }
 
-
-
 //函数
 
 // package main
 
 // import "fmt"
- 
+
 // func Add(a int, b int)(int){
 //     return a+b
 //     //fmt.Println(a+b)
 // }
- 
+
 // func Add2(a int, b int)(int,int){
 //     return a+b,b-a
 // }
@@ -278,8 +266,6 @@
 //     }
 // }
 
-
-
 // func main(){
 //     var ret int = Add(1,2)
 //     fmt.Println(ret)
@@ -294,23 +280,257 @@
 //     test(1)
 //     test(1,2)
 
-  
+// }
+
+// package main
+
+// import "fmt"
+// import "test/test2"
+
+// func test(num int)(){
+//     fmt.Println(num)
+// }
+
+// func test2(num int , testfunc func(int)){
+//     testfunc(num)
+// }
+// func main(){
+//     test2(10,test)
+
+//     fmt.Printf(test2.Add(1,2))
+// }
+
+//init
+// package main
+// import "fmt"
+
+// func init(){
+//     fmt.Println("init")
+// }
+// func main(){
+//     fmt.Println("main")
+// }
+
+//匿名函数
+
+// package main
+
+// import "fmt"
+
+// func main(){
+//     result := func(num1 int,num2 int)(int){
+//         return num1+num2
+//     }
+//     fmt.Println(result(10,20))
+// }
+
+//分包
+
+// package main
+
+// import (
+//     "fmt"
+//     "test/test2"
+// )
+
+// func main(){
+//     fmt.Println(test2.StuNo)
+// }
+
+//闭包
+
+// package main
+
+// import "fmt"
+
+// func getSum() (func (int) (int)) {
+//     var sum int = 0
+//     return func (num int)(int){
+//         sum+=num
+//         return sum
+//     }
+// }
+// func main(){
+//     f := getSum()
+//     fmt.Println(f(1))  //  ->1
+//     fmt.Println(f(2))  //  ->3
+// }
+
+//defer
+
+// package main
+
+// import "fmt"
+
+// func main(){
+//     add(1,2)
+// }
+// func add(num1 int ,num2 int) (int){
+//     defer fmt.Println("num1 =",num1)
+//     defer fmt.Println("num2 =",num2)
+//     num1+=1
+//     num2+=2
+//     fmt.Println("sum =",num1+num2)
+//     return num1+num2
+// }
+
+//字符串
+
+// package main
+
+// import "fmt"
+// import "strconv"
+// import "strings"
+// import "time"
+// func main(){
+//     str := "abcdef哈哈"  //go中一个汉字3个字节
+//     //统计字符串长度
+//     fmt.Println("str长度为",len(str))
+
+//     //字符串遍历
+//     //方式一
+//     for i,value:= range str{
+//         fmt.Printf("i = %d value = %c\n",i,value)
+//     }
+//     //方式二 切片
+//     r := []rune(str)
+//     for i:=0;i<len(r);i++{
+//         fmt.Printf("%c",r[i])
+//     }
+
+//     //字符串转数字
+//     num,_:=strconv.Atoi("666")
+//     fmt.Println(num)
+//     //数字转字符串
+//     s:=strconv.Itoa(88)
+//     fmt.Println(s)
+
+//     //统计字符串中子串的个数
+
+//     count := strings.Count(" ","abc")
+//     fmt.Println(count)
+
+//     //不区分大小写比较
+
+//     flag := strings.EqualFold("hello","Hello")
+//     fmt.Println(flag)
+
+//     //返回子串在字符串第一次出现的位置
+
+//     index := strings.Index("abcd","g")
+//     fmt.Println(index)
+
+//     //字符串替换
+//     str1 := strings.Replace("gogogogogogog","go","goo",-1)
+//     str2 := strings.Replace("gogogogogogog","go","goo",2)
+
+//     fmt.Println(str1)
+//     fmt.Println(str2)
+
+//     //字符串切割
+//     arr := strings.Split("ab-ac-dd","-")
+//     fmt.Println(arr)
+//     //大小写转化
+
+//     fmt.Println(strings.ToLower("Go"))
+//     fmt.Println(strings.ToUpper("Go"))
+
+//     //将字符串左右两边空格去除
+//     fmt.Println(strings.TrimSpace("  ss  "))
+//     //去掉指定字符
+//     fmt.Println(strings.Trim("--aaa-aaa--","-"))
+//     //指定左边 右边   TrimLeft
+//     //判断字符串是否以指定字符串开头 strings.HasPrefix("hh.a","hh")
+//     //判断字符串是否以指定字符串结尾 strings.HaSuf`fix("hh.a","a")
+//     now := time.Now()
+//     fmt.Println(now)
+
+// }
+
+// package main
+
+// import "fmt"
+
+// func main() {
+// 	fmt.Println(len("aaa"))
+
+//		num := new(int)
+//		fmt.Println((num))
+//	}
+// package main
+
+// import (
+// 	"errors"
+// 	"fmt"
+// )
+
+// func main() {
+// 	test()
+
+// 	fmt.Println("执行成功")
+// }
+
+// func test() (err error) {
+
+// 	num1 := 1
+// 	num2 := 0
+// 	if num2 == 0 {
+// 		return errors.New("err")
+// 	} else {
+// 		fmt.Println(num1 / num2)
+// 		return nil
+// 	}
+// }
+
+// func test() {
+
+// 	defer func() {
+// 		err := recover()
+// 		//如果没有捕获错误,返回值为nil
+// 		if err != nil {
+// 			fmt.Println("err是", err)
+// 		}
+// 	}()
+// 	num1 := 1
+// 	num2 := 0
+// 	fmt.Println(num1 / num2)
 // }
 
 package main
 
-import "fmt"
-import "test/test2"
+import (
+	"fmt"
+)
 
-func test(num int)(){
-    fmt.Println(num)
+func main() {
+	// var scores [5]int
+	// for i := 0; i < 5; i++ {
+	// 	fmt.Scanf("%d", &scores[i])
+	// }
+	// for i := 0; i < len(scores); i++ {
+	// 	fmt.Println(scores[i])
+	// }
+	// // for i,value:=range scores{
+
+	// // }
+	// fmt.Printf("%T", scores)
+	var arr1 [3]int = [3]int{1, 2, 3}
+	fmt.Println(arr1)
+
+	var arr2 = [3]int{1, 2, 3}
+
+	test(&arr2)
+	fmt.Println(arr2)
+	var arr3 = [2][3]int{{1, 2, 3}, {4, 5, 6}}
+	fmt.Println(arr3)
+
+	for _, v1 := range arr3 {
+		for _, v2 := range v1 {
+			fmt.Println(v2)
+		}
+	}
 }
 
-func test2(num int , testfunc func(int)){
-    testfunc(num)
-}
-func main(){
-    test2(10,test)
-
-    fmt.Printf(test2.Add(1,2))
+func test(arr *[3]int) {
+	arr[0] = 3
 }
