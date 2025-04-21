@@ -502,35 +502,69 @@ import (
 	"fmt"
 )
 
+// func main() {
+// 	// var scores [5]int
+// 	// for i := 0; i < 5; i++ {
+// 	// 	fmt.Scanf("%d", &scores[i])
+// 	// }
+// 	// for i := 0; i < len(scores); i++ {
+// 	// 	fmt.Println(scores[i])
+// 	// }
+// 	// // for i,value:=range scores{
+
+// 	// // }
+// 	// fmt.Printf("%T", scores)
+// 	var arr1 [3]int = [3]int{1, 2, 3}
+// 	fmt.Println(arr1)
+
+// 	var arr2 = [3]int{1, 2, 3}
+
+// 	test(&arr2)
+// 	fmt.Println(arr2)
+// 	var arr3 = [2][3]int{{1, 2, 3}, {4, 5, 6}}
+// 	fmt.Println(arr3)
+
+// 	for _, v1 := range arr3 {
+// 		for _, v2 := range v1 {
+// 			fmt.Println(v2)
+// 		}
+// 	}
+// }
+
+// func test(arr *[3]int) {
+// 	arr[0] = 3
+// }
+
+//切片
+
 func main() {
-	// var scores [5]int
-	// for i := 0; i < 5; i++ {
-	// 	fmt.Scanf("%d", &scores[i])
-	// }
-	// for i := 0; i < len(scores); i++ {
-	// 	fmt.Println(scores[i])
-	// }
-	// // for i,value:=range scores{
+	//var arr [6]int = [6]int{1, 2, 3, 4, 5, 6}
+	//定义一个切片，slic,[]表示动态的，所以长度不写,int表示类型
+	//[1:3] 从1开始，到3，但是不包含3  [1,3)
+	//var slic []int = arr[1:3]
+	// arr2 := arr[1:3]
+	// fmt.Println(slic)
+	// fmt.Println(arr2)
 
-	// // }
-	// fmt.Printf("%T", scores)
-	var arr1 [3]int = [3]int{1, 2, 3}
-	fmt.Println(arr1)
+	// arr3 := make([]int, 4, 20)
+	// arr4 := []int{1, 2, 3}
+	// fmt.Println(arr3, arr4)
 
-	var arr2 = [3]int{1, 2, 3}
+	// arr5 := arr[1:4]
+	// fmt.Println((arr5))
+	// //fmt.Println((arr5[4]))
+	// arr6 := arr5[0:2]
+	// fmt.Println(arr6)
+	var arr [6]int = [6]int{1, 2, 3, 4, 5, 6}
+	var slic []int = arr[1:3]
+	arr2 := append(slic, 1, 2)
+	arr2[0] = 99
+	fmt.Println("arr", arr)
+	fmt.Println("slic", slic)
+	fmt.Println("arr2", arr2)
 
-	test(&arr2)
-	fmt.Println(arr2)
-	var arr3 = [2][3]int{{1, 2, 3}, {4, 5, 6}}
-	fmt.Println(arr3)
+	//arr3 := []int{8, 8}
+	slic = append(slic, arr...)
+	fmt.Println(slic)
 
-	for _, v1 := range arr3 {
-		for _, v2 := range v1 {
-			fmt.Println(v2)
-		}
-	}
-}
-
-func test(arr *[3]int) {
-	arr[0] = 3
 }
