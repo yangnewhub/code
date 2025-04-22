@@ -329,12 +329,12 @@
 // package main
 
 // import (
-//     "fmt"
-//     "test/test2"
+// 	"fmt"
+// 	"test/test2"
 // )
 
-// func main(){
-//     fmt.Println(test2.StuNo)
+// func main() {
+// 	fmt.Println(test2.StuNo)
 // }
 
 //闭包
@@ -496,11 +496,9 @@
 // 	fmt.Println(num1 / num2)
 // }
 
-package main
+// package main
 
-import (
-	"fmt"
-)
+// import "fmt"
 
 // func main() {
 // 	// var scores [5]int
@@ -537,34 +535,175 @@ import (
 
 //切片
 
+// func main() {
+// 	//var arr [6]int = [6]int{1, 2, 3, 4, 5, 6}
+// 	//定义一个切片，slic,[]表示动态的，所以长度不写,int表示类型
+// 	//[1:3] 从1开始，到3，但是不包含3  [1,3)
+// 	//var slic []int = arr[1:3]
+// 	// arr2 := arr[1:3]
+// 	// fmt.Println(slic)
+// 	// fmt.Println(arr2)
+
+// 	// arr3 := make([]int, 4, 20)
+// 	// arr4 := []int{1, 2, 3}
+// 	// fmt.Println(arr3, arr4)
+
+// 	// arr5 := arr[1:4]
+// 	// fmt.Println((arr5))
+// 	// //fmt.Println((arr5[4]))
+// 	// arr6 := arr5[0:2]
+// 	// fmt.Println(arr6)
+// 	var arr [6]int = [6]int{1, 2, 3, 4, 5, 6}
+// 	var slic []int = arr[1:3]
+// 	arr2 := append(slic, 1, 2)
+// 	arr2[0] = 99
+// 	fmt.Println("arr", arr)
+// 	fmt.Println("slic", slic)
+// 	fmt.Println("arr2", arr2)
+
+// 	//arr3 := []int{8,8}
+// 	arr3 := [2]int{8,8}
+// 	slic= append(slic,arr3[0:len(arr3)]...)
+
+// }
+
+//map
+
+// func main() {
+// 	// var a map[int]string = make(map[int]string, 10)
+
+// 	// a[1] = "张三"
+// 	// a[10] = "张三"
+
+// 	// a[0] = "张三"
+
+// 	// fmt.Println(a)
+// 	//创建
+// 	b := make(map[int]string)
+// 	//增加
+// 	b[0] = "aa"
+// 	b[1] = "aa"
+// 	fmt.Println(b)
+// 	//改
+// 	b[0] = "bb"
+// 	fmt.Println(b)
+// 	//删
+// 	delete(b, 0)
+// 	fmt.Println(b)
+// 	//查
+// 	value, flag := b[1]
+// 	fmt.Println(value, flag)
+// 	//len
+// 	fmt.Println(len(b))
+
+// 	for k, v := range b {
+// 		fmt.Println(k, v)
+// 	}
+
+// 	a := make(map[int]map[int]string)
+// 	a[0] = make(map[int]string)
+// 	a[0][1] = "aa"
+// 	a[0][2] = "aa"
+
+// 	fmt.Println(a)
+
+// }
+
+//结构体
+
+// type Teacher struct {
+// 	name string
+// 	age  int
+// }
+
+// func (t *Teacher) String() string {
+// 	str := fmt.Sprintf("name = %s,age = %d", t.name, t.age)
+// 	return str
+// }
+
+// func main() {
+// 	t := Teacher{"aaa", 11}
+// 	fmt.Println(&t)
+// }
+
+// func (t *Teacher) test() {
+// 	t.name = "aaa"
+// 	t.age = 11
+// 	fmt.Println(t)
+// }
+
+// func main() {
+// 	var t Teacher = Teacher{"vvv", 1}
+// 	//(&t).test()
+// 	t.test()
+// 	fmt.Println(t)
+// }
+
+// func main() {
+// 	var a Teacher
+// 	a.age = 10
+// 	a.name = "aaa"
+// 	fmt.Println(a)
+
+// 	var b Teacher = Teacher{"bbb", 12}
+// 	fmt.Println(b)
+
+// 	var c *Teacher = new(Teacher)
+// 	// (*c).age = 10
+// 	// (*c).name = "ccc"
+// 	c.age = 11
+// 	c.name = "ccc"
+// 	fmt.Println(*c)
+
+// }
+// package main
+package main
+
+import "fmt"
+
+// import "test/test2"
+
+// func main() {
+// 	// s := test2.Teacher{"aaa", 11}
+// 	// s.Test()
+
+// 	// fmt.Println(s)
+
+// 	// s := test2.NewTeacher("aaa", 11)
+// 	// s.GetAge()
+
+// 	cat := &test2.Cat{}
+// 	//cat.Animal.Age=1
+// 	cat.Age = 1
+// 	cat.Weight = 2
+// 	cat.Show()
+// }
+
+type SayHello interface {
+	sayhello()
+}
+
+type Chinese struct {
+}
+
+func (c *Chinese) sayhello() {
+	fmt.Println("你好")
+}
+
+type Amilen struct {
+}
+
+func (c *Amilen) sayhello() {
+	fmt.Println("hi")
+}
+
+func hello(s SayHello) {
+	s.sayhello()
+}
+
 func main() {
-	//var arr [6]int = [6]int{1, 2, 3, 4, 5, 6}
-	//定义一个切片，slic,[]表示动态的，所以长度不写,int表示类型
-	//[1:3] 从1开始，到3，但是不包含3  [1,3)
-	//var slic []int = arr[1:3]
-	// arr2 := arr[1:3]
-	// fmt.Println(slic)
-	// fmt.Println(arr2)
-
-	// arr3 := make([]int, 4, 20)
-	// arr4 := []int{1, 2, 3}
-	// fmt.Println(arr3, arr4)
-
-	// arr5 := arr[1:4]
-	// fmt.Println((arr5))
-	// //fmt.Println((arr5[4]))
-	// arr6 := arr5[0:2]
-	// fmt.Println(arr6)
-	var arr [6]int = [6]int{1, 2, 3, 4, 5, 6}
-	var slic []int = arr[1:3]
-	arr2 := append(slic, 1, 2)
-	arr2[0] = 99
-	fmt.Println("arr", arr)
-	fmt.Println("slic", slic)
-	fmt.Println("arr2", arr2)
-
-	//arr3 := []int{8, 8}
-	slic = append(slic, arr...)
-	fmt.Println(slic)
-
+	a := Amilen{}
+	c := Chinese{}
+	hello(&a)
+	hello(&c)
 }
