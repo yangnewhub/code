@@ -659,7 +659,10 @@
 // package main
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // import "test/test2"
 
@@ -679,31 +682,83 @@ import "fmt"
 // 	cat.Show()
 // }
 
-type SayHello interface {
-	sayhello()
-}
+// type SayHello interface {
+// 	sayhello()
+// }
 
-type Chinese struct {
-}
+// type Chinese struct {
+// }
 
-func (c *Chinese) sayhello() {
-	fmt.Println("你好")
-}
+// func (c *Chinese) sayhello() {
+// 	fmt.Println("你好")
+// }
 
-type Amilen struct {
-}
+// type Amilen struct {
+// }
 
-func (c *Amilen) sayhello() {
-	fmt.Println("hi")
-}
+// func (c *Amilen) sayhello() {
+// 	fmt.Println("hi")
+// }
 
-func hello(s SayHello) {
-	s.sayhello()
-}
+// func hello(s SayHello) {
+// 	s.sayhello()
+// }
 
+// func main() {
+// 	a := Amilen{}
+// 	c := Chinese{}
+// 	hello(&a)
+// 	hello(&c)
+// }
+
+//协程
+// import (
+// 	"fmt"
+// 	"strconv"
+// 	"time"
+// )
+
+// func test() {
+// 	for i := 1; i <= 10; i++ {
+// 		fmt.Println("hello go", strconv.Itoa(i))
+// 		time.Sleep(time.Second)
+// 	}
+// }
+// func main() {
+// 	go test()
+
+// 	for i := 1; i <= 10; i++ {
+// 		fmt.Println("hello long", strconv.Itoa(i))
+// 		time.Sleep(time.Second)
+// 	}
+// }
+
+//多协程
+// func test(i int){
+// 	fmt.Println(i)
+// }
+// func main() {
+// 	for i := 1; i <= 5; i++ {
+// 		go func() {
+// 			fmt.Println(i)
+// 		}()
+// 	}
+// 	time.Sleep(time.Second * 4)
+
+// }
+
+//WaitGroup
+
+var wg sync.WaitGroup //不需要初始化 他就是一个计数器
 func main() {
-	a := Amilen{}
-	c := Chinese{}
-	hello(&a)
-	hello(&c)
+	for i := 1; i <= 5; i++ {
+		wg.Add(1) // 计数器加1
+		go func(n int) {
+			fmt.Println(n)
+			wg.Done() //计数器减1
+		}(i)
+	}
+
+	wg.Wait() //等待
+
 }
