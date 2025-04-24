@@ -661,7 +661,7 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"time"
 )
 
 // import "test/test2"
@@ -685,80 +685,186 @@ import (
 // type SayHello interface {
 // 	sayhello()
 // }
-
 // type Chinese struct {
 // }
-
 // func (c *Chinese) sayhello() {
 // 	fmt.Println("你好")
 // }
-
 // type Amilen struct {
 // }
-
 // func (c *Amilen) sayhello() {
 // 	fmt.Println("hi")
 // }
-
 // func hello(s SayHello) {
 // 	s.sayhello()
 // }
-
 // func main() {
 // 	a := Amilen{}
 // 	c := Chinese{}
 // 	hello(&a)
 // 	hello(&c)
+// 	//var s SayHello = &a
 // }
 
-//协程
-// import (
-// 	"fmt"
-// 	"strconv"
-// 	"time"
-// )
+//ch,flag:= s.(Chinese)
+//if flag==true{
 
-// func test() {
-// 	for i := 1; i <= 10; i++ {
-// 		fmt.Println("hello go", strconv.Itoa(i))
-// 		time.Sleep(time.Second)
+//加锁
+// var wg sync.WaitGroup
+// var lock sync.Mutex
+// var num int
+// func add() {
+// 	for i := 1; i <= 100000; i++ {
+// 		lock.Lock()
+// 		num = num + 1
+// 		lock.Unlock()
 // 	}
+// 	wg.Done()
+// }
+// func sub() {
+// 	for i := 1; i <= 100000; i++ {
+// 		lock.Lock()
+// 		num = num - 1
+// 		lock.Unlock()
+// 	}
+// 	wg.Done()
 // }
 // func main() {
-// 	go test()
-
-// 	for i := 1; i <= 10; i++ {
-// 		fmt.Println("hello long", strconv.Itoa(i))
-// 		time.Sleep(time.Second)
-// 	}
+// 	wg.Add(2)
+// 	go add()
+// 	go sub()
+// 	wg.Wait()
+// 	fmt.Println(num)
 // }
 
-//多协程
-// func test(i int){
-// 	fmt.Println(i)
+// 读写锁
+// var wg sync.WaitGroup
+// var lock sync.RWMutex
+// func read() {
+// 	defer wg.Done()
+// 	lock.RLock()
+// 	fmt.Println("aa")
+// 	lock.RUnlock()
+// }
+// func write() {
+// 	defer wg.Done()
+// 	lock.Lock()
+// 	fmt.Println("bb")
+// 	time.Sleep(time.Second)
+// 	lock.Unlock()
 // }
 // func main() {
+// 	wg.Add(6)
 // 	for i := 1; i <= 5; i++ {
-// 		go func() {
-// 			fmt.Println(i)
-// 		}()
+// 		go read()
 // 	}
-// 	time.Sleep(time.Second * 4)
+// 	go write()
+// 	wg.Wait()
+// }
+
+//管道
+
+// func main() {
+// 	pipe := make(chan int, 3)
+// 	pipe <- 3
+// 	pipe <- 2
+// 	pipe <- 1
+// 	fmt.Println(len(pipe), cap(pipe))
+
+// 	num := <-pipe
+// 	fmt.Println(num)
+// 	close(pipe)
+// }
+//管道遍历
+
+// func main() {
+// 	pipe := make(chan int, 100)
+// 	for i := 0; i < 100; i++ {
+// 		pipe <- i
+// 	}
+
+// 	close(pipe)
+
+// 	for v := range pipe {
+// 		fmt.Println(v)
+// 	}
+// }
+
+// var wg sync.WaitGroup
+
+// func write(pipe chan int) {
+// 	defer wg.Done()
+// 	for i := 1; i <= 50; i++ {
+// 		fmt.Printf("write %d\n", i)
+// 		pipe <- i
+// 		//time.Sleep(time.Second)
+// 	}
+
+// 	close(pipe)
+// }
+// func read(pipe chan int) {
+// 	defer wg.Done()
+
+// 	for v := range pipe {
+// 		fmt.Printf("read %d\n", v)
+// 	}
+// }
+
+// func main() {
+// 	pipe := make(chan int, 50)
+
+// 	wg.Add(2)
+// 	go write(pipe)
+// 	go read(pipe)
+// 	wg.Wait()
+// }
+
+//select
+// func main() {
+// 	intChan := make(chan int, 3)
+// 	go func() {
+// 		time.Sleep(time.Second)
+// 		intChan <- 1
+// 	}()
+// 	stringChan := make(chan string, 3)
+// 	go func() {
+// 		stringChan <- "aa"
+// 	}()
+
+// 	for i := 0; i < 2; i++ {
+// 		select {
+// 		case v := <-intChan:
+// 			fmt.Println(v)
+// 		case v2 := <-stringChan:
+// 			fmt.Println(v2)
+// 		default:
+// 		}
+
+// 	}
 
 // }
 
-//WaitGroup
+//异常 defer recover
 
-var wg sync.WaitGroup //不需要初始化 他就是一个计数器
 func main() {
-	for i := 1; i <= 5; i++ {
-		wg.Add(1) // 计数器加1
-		go func(n int) {
-			fmt.Println(n)
-			wg.Done() //计数器减1
-		}(i)
-	}
+	go func() {
+		for i := 0; i < 10; i++ {
+			fmt.Println(i)
+		}
+	}()
 
-	wg.Wait() //等待
+	go func() {
+		defer func() {
+			err := recover()
+			if err != nil {
+				fmt.Println(err)
+			}
+		}()
+		num1 := 1
+		num2 := 0
+		fmt.Println(num1 / num2)
+	}()
+
+	time.Sleep(time.Second)
 
 }
