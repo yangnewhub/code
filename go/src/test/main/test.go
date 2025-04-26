@@ -659,10 +659,7 @@
 // package main
 package main
 
-import (
-	"fmt"
-	"time"
-)
+import "fmt"
 
 // import "test/test2"
 
@@ -844,27 +841,83 @@ import (
 
 // }
 
-//异常 defer recover
+// //异常 defer recover
+
+// func main() {
+// 	go func() {
+// 		for i := 0; i < 10; i++ {
+// 			fmt.Println(i)
+// 		}
+// 	}()
+
+// 	go func() {
+// 		defer func() {
+// 			err := recover()
+// 			if err != nil {
+// 				fmt.Println(err)
+// 			}
+// 		}()
+// 		num1 := 1
+// 		num2 := 0
+// 		fmt.Println(num1 / num2)
+// 	}()
+
+// 	time.Sleep(time.Second)
+
+// }
+
+// //反射
+
+// func main(){
+// 	var num int = 100
+
+// }
+
+//sort
+
+// func main() {
+// 	nums1 := []int{6, 5, 4, 3, 2, 1}
+// 	nums2 := []float64{6.6, 5.5, 4.4, 3.3, 2.2, 1.1}
+// 	nums3 := []string{"b", "c", "a"}
+
+// 	//升序
+// 	sort.Ints(nums1)
+// 	sort.Float64s(nums2)
+// 	sort.Strings(nums3)
+// 	fmt.Println(nums1)
+// 	fmt.Println(nums2)
+// 	fmt.Println(nums3)
+
+// 	//降序
+// 	sort.Sort(sort.Reverse(sort.IntSlice(nums1)))
+// 	sort.Sort(sort.Reverse(sort.Float64Slice(nums2)))
+// 	sort.Sort(sort.Reverse(sort.StringSlice(nums3)))
+// 	fmt.Println(nums1)
+// 	fmt.Println(nums2)
+// 	fmt.Println(nums3)
+// }
+
+//map延申
 
 func main() {
-	go func() {
-		for i := 0; i < 10; i++ {
-			fmt.Println(i)
-		}
-	}()
+	// a := make(map[string]string)
+	// a["aa"] = "1"
+	// fmt.Println(a)
 
-	go func() {
-		defer func() {
-			err := recover()
-			if err != nil {
-				fmt.Println(err)
-			}
-		}()
-		num1 := 1
-		num2 := 0
-		fmt.Println(num1 / num2)
-	}()
+	//想要存储学生的各种信息
+	//可以做成切片
+	// userinfo := make([]map[string]string, 2, 2)
 
-	time.Sleep(time.Second)
+	// if userinfo[0] == nil {
+	// 	userinfo[0] = make(map[string]string)
+	// 	userinfo[0]["username"] = "张三"
+	// 	userinfo[0]["age"] = "12"
+	// 	userinfo[0]["a"] = "12"
+	// }
+	// fmt.Println(userinfo)
 
+	//map存放一系列属性，例如爱好也就是v做成切片
+	userinfo := make(map[string][]string)
+	// userinfo["hobby"] = []string{"a", "b"}
+	fmt.Println(userinfo)
 }
